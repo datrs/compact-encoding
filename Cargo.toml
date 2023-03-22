@@ -1,0 +1,14 @@
+[package]
+name = "compact-encoding"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+description = "A series of compact encoding schemes for building small and fast parsers and serializers"
+documentation = "https://docs.rs/compact-encoding"
+repository = "https://github.com/datrs/compact-encoding"
+readme = "README.md"
+authors = ["Timo Tiuraniemi <timo.tiuraniemi@iki.fi>"]
+keywords = ["dat", "encoding"]
+categories = [
+  "encoding",
+]
+edition = "2018"
