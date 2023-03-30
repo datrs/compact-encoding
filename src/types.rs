@@ -67,7 +67,7 @@ impl State {
         self.start += len;
     }
 
-    /// Decode a String
+    /// Decode a String. Panics if buffer contains invalid UTF-8.
     pub fn decode_string(&mut self, buffer: &[u8]) -> String {
         let len = self.decode_usize_var(buffer);
         let value = std::str::from_utf8(&buffer[self.start..self.start + len])
@@ -368,7 +368,8 @@ impl State {
         }
     }
 
-    /// Decode a variable length usize
+    /// Decode a variable length usize. Panics if buffer contins an integer
+    /// larger than usize of the system.
     pub fn decode_usize_var(&mut self, buffer: &[u8]) -> usize {
         let first = buffer[self.start];
         self.start += 1;
