@@ -15,8 +15,15 @@ pub struct State {
     pub end: usize,
 }
 
+impl Default for State {
+    /// Create empty state
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl State {
-    /// Create emtpy state
+    /// Create empty state
     pub fn new() -> State {
         State::new_with_start_and_end(0, 0)
     }

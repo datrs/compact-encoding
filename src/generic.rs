@@ -121,7 +121,7 @@ impl CompactEncoding<Vec<u32>> for State {
         let len = self.decode_usize_var(buffer);
         let mut value: Vec<u32> = Vec::with_capacity(len);
         for _ in 0..len {
-            value.push(self.decode_u32(&buffer));
+            value.push(self.decode_u32(buffer));
         }
         value
     }
