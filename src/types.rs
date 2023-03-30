@@ -98,8 +98,7 @@ impl State {
 
     /// Decode a fixed length u16
     pub fn decode_u16(&mut self, buffer: &[u8]) -> u16 {
-        let value: u16 =
-            ((buffer[self.start] as u16) << 0) | ((buffer[self.start + 1] as u16) << 8);
+        let value: u16 = (buffer[self.start] as u16) | ((buffer[self.start + 1] as u16) << 8);
         self.start += 2;
         value
     }
@@ -127,6 +126,7 @@ impl State {
     }
 
     /// Decode a variable length u32
+    #[allow(clippy::comparison_chain)]
     pub fn decode_u32_var(&mut self, buffer: &[u8]) -> u32 {
         let first = buffer[self.start];
         self.start += 1;
@@ -135,13 +135,13 @@ impl State {
         } else if first == U16_SIGNIFIER {
             self.decode_u16(buffer).into()
         } else {
-            self.decode_u32(buffer).into()
+            self.decode_u32(buffer)
         }
     }
 
     /// Decode a fixed length u32
     pub fn decode_u32(&mut self, buffer: &[u8]) -> u32 {
-        let value: u32 = ((buffer[self.start] as u32) << 0)
+        let value: u32 = (buffer[self.start] as u32)
             | ((buffer[self.start + 1] as u32) << 8)
             | ((buffer[self.start + 2] as u32) << 16)
             | ((buffer[self.start + 3] as u32) << 24);
@@ -192,7 +192,7 @@ impl State {
 
     /// Decode a fixed length u64
     pub fn decode_u64(&mut self, buffer: &[u8]) -> u64 {
-        let value: u64 = ((buffer[self.start] as u64) << 0)
+        let value: u64 = (buffer[self.start] as u64)
             | ((buffer[self.start + 1] as u64) << 8)
             | ((buffer[self.start + 2] as u64) << 16)
             | ((buffer[self.start + 3] as u64) << 24)
@@ -205,7 +205,7 @@ impl State {
     }
 
     /// Preencode a byte buffer
-    pub fn preencode_buffer(&mut self, value: &Box<[u8]>) {
+    pub fn preencode_buffer(&mut self, value: &[u8]) {
         let len = value.len();
         self.preencode_usize_var(&len);
         self.end += len;
@@ -284,7 +284,7 @@ impl State {
     pub fn preencode_string_array(&mut self, value: &Vec<String>) {
         let len = value.len();
         self.preencode_usize_var(&len);
-        for string_value in value.into_iter() {
+        for string_value in value.iter() {
             self.preencode_str(string_value);
         }
     }

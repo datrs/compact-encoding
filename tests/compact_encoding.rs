@@ -14,7 +14,7 @@ fn cenc_basic() {
     let u32_value_4: u32 = 0xF0E1D2C3;
 
     let mut enc_state = State::new();
-    enc_state.preencode_str(&str_value_1);
+    enc_state.preencode_str(str_value_1);
     enc_state.preencode(&str_value_2);
     enc_state.preencode(&u32_value_3);
     enc_state.preencode(&u32_value_4);
@@ -22,7 +22,7 @@ fn cenc_basic() {
     // Strings: 1 byte for length, 3/252 bytes for content
     // u32: 1 byte for u32 signifier, 4 bytes for data
     assert_eq!(buffer.len(), 1 + 3 + 1 + 252 + 1 + 4 + 1 + 4);
-    enc_state.encode_str(&str_value_1, &mut buffer);
+    enc_state.encode_str(str_value_1, &mut buffer);
     enc_state.encode(&str_value_2, &mut buffer);
     enc_state.encode(&u32_value_3, &mut buffer);
     enc_state.encode(&u32_value_4, &mut buffer);
