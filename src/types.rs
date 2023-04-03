@@ -94,6 +94,18 @@ impl State {
         self.start
     }
 
+    /// Set start value
+    pub fn set_start(&mut self, value: usize) -> Result<(), EncodingError> {
+        if value > self.end {
+            return Err(EncodingError::new(
+                EncodingErrorKind::OutOfBounds,
+                &format!("Value exceeded state.end: {} > {}", value, self.end),
+            ));
+        }
+        self.start = value;
+        Ok(())
+    }
+
     /// End value
     pub fn end(&self) -> usize {
         self.end
