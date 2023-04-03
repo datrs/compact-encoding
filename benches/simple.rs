@@ -9,22 +9,22 @@ const U64_VALUE: u64 = u64::MAX;
 
 fn preencode() -> State {
     let mut enc_state = State::new();
-    enc_state.preencode(&U32_VALUE);
-    enc_state.preencode_str(STR_VALUE);
-    enc_state.preencode(&U64_VALUE);
+    enc_state.preencode(&U32_VALUE).unwrap();
+    enc_state.preencode_str(STR_VALUE).unwrap();
+    enc_state.preencode(&U64_VALUE).unwrap();
     enc_state
 }
 
 fn encode(enc_state: &mut State, buffer: &mut [u8]) {
-    enc_state.encode(&U32_VALUE, buffer);
-    enc_state.encode_str(STR_VALUE, buffer);
-    enc_state.encode(&U64_VALUE, buffer);
+    enc_state.encode(&U32_VALUE, buffer).unwrap();
+    enc_state.encode_str(STR_VALUE, buffer).unwrap();
+    enc_state.encode(&U64_VALUE, buffer).unwrap();
 }
 
 fn decode(dec_state: &mut State, buffer: &[u8]) {
-    let _: u32 = dec_state.decode(buffer);
-    let _: String = dec_state.decode(buffer);
-    let _: u64 = dec_state.decode(buffer);
+    let _: u32 = dec_state.decode(buffer).unwrap();
+    let _: String = dec_state.decode(buffer).unwrap();
+    let _: u64 = dec_state.decode(buffer).unwrap();
 }
 
 fn preencode_generic_simple(c: &mut Criterion) {
