@@ -12,3 +12,10 @@ categories = [
   "encoding",
 ]
 edition = "2018"
+
+[dev-dependencies]
+criterion = "0.4"
+
+[[bench]]
+name = "simple"
+harness = false
