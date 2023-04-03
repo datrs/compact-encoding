@@ -111,6 +111,11 @@ impl State {
         self.end
     }
 
+    /// Set end value
+    pub fn set_end(&mut self, value: usize) {
+        self.end = value;
+    }
+
     /// Add to start handling overflow and out of bounds.
     pub fn add_start(&mut self, increment: usize) -> Result<usize, EncodingError> {
         self.start = self.start.checked_add(increment).ok_or_else(|| {
