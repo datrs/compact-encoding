@@ -1,6 +1,6 @@
 //! Basic types of compact_encoding.
 use std::convert::TryFrom;
-use std::fmt::Debug;
+use std::fmt;
 use std::ops::Range;
 
 const U16_SIGNIFIER: u8 = 0xfd;
@@ -8,7 +8,7 @@ const U32_SIGNIFIER: u8 = 0xfe;
 const U64_SIGNIFIER: u8 = 0xff;
 
 /// Specific type [EncodingError]
-#[derive(Debug)]
+#[derive(fmt::Debug)]
 pub enum EncodingErrorKind {
     /// Encoding or decoding did not stay between [State] `start` and `end`.
     OutOfBounds,
@@ -19,7 +19,7 @@ pub enum EncodingErrorKind {
 }
 
 /// Encoding/decoding error.
-#[derive(Debug)]
+#[derive(fmt::Debug)]
 pub struct EncodingError {
     /// Specific type of error
     pub kind: EncodingErrorKind,
@@ -34,6 +34,17 @@ impl EncodingError {
             kind,
             message: message.to_string(),
         }
+    }
+}
+
+impl fmt::Display for EncodingError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let prefix = match self.kind {
+            EncodingErrorKind::OutOfBounds => "Compact encoding failed, out of bounds",
+            EncodingErrorKind::Overflow => "Compact encoding failed, overflow",
+            EncodingErrorKind::InvalidData => "Compact encoding failed, invalid data",
+        };
+        write!(f, "{}: {}", prefix, self.message)
     }
 }
 
@@ -621,7 +632,7 @@ impl State {
 /// Compact Encoding
 pub trait CompactEncoding<T>
 where
-    T: Debug,
+    T: fmt::Debug,
 {
     /// Preencode
     fn preencode(&mut self, value: &T) -> Result<usize, EncodingError>;
