@@ -48,6 +48,17 @@ impl fmt::Display for EncodingError {
     }
 }
 
+impl From<EncodingError> for std::io::Error {
+    fn from(e: EncodingError) -> Self {
+        match e.kind {
+            EncodingErrorKind::InvalidData => {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{}", e))
+            }
+            _ => std::io::Error::new(std::io::ErrorKind::Other, format!("{}", e)),
+        }
+    }
+}
+
 /// State.
 #[derive(Debug, Clone)]
 pub struct State {
