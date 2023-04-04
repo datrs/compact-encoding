@@ -43,7 +43,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - uses: Swatinem/rust-cache@v1
       - name: Run tests
         run: |
           cargo check
@@ -57,7 +56,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - uses: Swatinem/rust-cache@v1
       - name: Run tests
         run: |
           cargo check
@@ -76,7 +74,7 @@ jobs:
           cargo build --target=wasm32-unknown-unknown
 
   lint:
-    runs-on: [self-hosted, X64]
+    runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v3
