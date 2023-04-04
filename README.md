@@ -15,8 +15,8 @@ and serializers. Binary compatible with the
 
 [1]: https://img.shields.io/crates/v/compact-encoding.svg?style=flat-square
 [2]: https://crates.io/crates/compact-encoding
-[3]: https://img.shields.io/travis/datrs/compact-encoding.svg?style=flat-square
-[4]: https://travis-ci.org/datrs/compact-encoding
+[3]: https://github.com/datrs/compact-encoding/actions/workflows/ci.yaml/badge.svg
+[4]: https://github.com/datrs/compact-encoding/actions
 [5]: https://img.shields.io/crates/d/compact-encoding.svg?style=flat-square
 [6]: https://crates.io/crates/compact-encoding
 [7]: https://docs.rs/compact-encoding/badge.svg
