@@ -194,3 +194,30 @@ fn cenc_fixed_and_raw() -> Result<(), EncodingError> {
     assert_eq!(buf_value_2, buf_value_2_ret);
     Ok(())
 }
+
+#[test]
+fn cenc_32_byte_array() -> Result<(), EncodingError> {
+    let empty_array: Vec<[u8; 32]> = vec![];
+    let one_array: Vec<[u8; 32]> = vec![[0; 32]];
+    let many_array: Vec<[u8; 32]> = vec![[1; 32], [2; 32], [3; 32]];
+    let mut enc_state = State::new();
+
+    enc_state.preencode(&empty_array)?;
+    enc_state.preencode(&one_array)?;
+    enc_state.preencode(&many_array)?;
+    let mut buffer = enc_state.create_buffer();
+    // 1 byte for array length,
+    // 32 bytes for content
+    assert_eq!(buffer.len(), 1 + 1 + 32 + 1 + 3 * 32);
+    enc_state.encode(&empty_array, &mut buffer)?;
+    enc_state.encode(&one_array, &mut buffer)?;
+    enc_state.encode(&many_array, &mut buffer)?;
+    let mut dec_state = State::from_buffer(&buffer);
+    let empty_array_ret: Vec<[u8; 32]> = dec_state.decode(&buffer)?;
+    let one_array_ret: Vec<[u8; 32]> = dec_state.decode(&buffer)?;
+    let many_array_ret: Vec<[u8; 32]> = dec_state.decode(&buffer)?;
+    assert_eq!(empty_array, empty_array_ret);
+    assert_eq!(one_array, one_array_ret);
+    assert_eq!(many_array, many_array_ret);
+    Ok(())
+}

@@ -291,8 +291,11 @@ impl State {
     pub fn decode_string(&mut self, buffer: &[u8]) -> Result<String, EncodingError> {
         let len = self.decode_usize_var(buffer)?;
         let range = self.validate(len, buffer)?;
-        let value = std::str::from_utf8(&buffer[range]).map_err(|_| {
-            EncodingError::new(EncodingErrorKind::InvalidData, "string is invalid UTF-8")
+        let value = std::str::from_utf8(&buffer[range]).map_err(|err| {
+            EncodingError::new(
+                EncodingErrorKind::InvalidData,
+                &format!("String is invalid UTF-8, {}", err),
+            )
         })?;
         self.add_start(len)?;
         Ok(value.to_string())

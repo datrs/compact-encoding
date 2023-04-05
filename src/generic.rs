@@ -1,7 +1,9 @@
 //! Generic compact encodings
-use crate::EncodingErrorKind;
+
+use std::convert::TryInto;
 
 use super::{CompactEncoding, EncodingError, State};
+use crate::EncodingErrorKind;
 
 impl CompactEncoding<String> for State {
     fn preencode(&mut self, value: &String) -> Result<usize, EncodingError> {
@@ -151,5 +153,48 @@ impl CompactEncoding<Vec<String>> for State {
 
     fn decode(&mut self, buffer: &[u8]) -> Result<Vec<String>, EncodingError> {
         self.decode_string_array(buffer)
+    }
+}
+
+impl CompactEncoding<Vec<[u8; 32]>> for State {
+    fn preencode(&mut self, value: &Vec<[u8; 32]>) -> Result<usize, EncodingError> {
+        let len = value.len();
+        self.preencode(&len)?;
+        let size = len.checked_mul(32).ok_or_else(|| {
+            EncodingError::new(
+                EncodingErrorKind::Overflow,
+                &format!(
+                    "Vec<[u8; 32]> byte size overflowed: {} * 32 > {}",
+                    len,
+                    usize::MAX
+                ),
+            )
+        })?;
+        self.add_end(size)?;
+        Ok(self.end())
+    }
+
+    fn encode(&mut self, value: &Vec<[u8; 32]>, buffer: &mut [u8]) -> Result<usize, EncodingError> {
+        self.encode(&value.len(), buffer)?;
+        for entry in value {
+            self.set_slice_to_buffer_fixed(entry, buffer, 32)?;
+        }
+        Ok(self.start())
+    }
+
+    fn decode(&mut self, buffer: &[u8]) -> Result<Vec<[u8; 32]>, EncodingError> {
+        let len: usize = self.decode(buffer)?;
+        let mut entries: Vec<[u8; 32]> = Vec::with_capacity(len);
+        for _ in 0..len {
+            let range = self.validate(32, buffer)?;
+            entries.push(buffer[range].try_into().map_err(|err| {
+                EncodingError::new(
+                    EncodingErrorKind::InvalidData,
+                    &format!("Could not convert byte slice to [u8; 32], {}", err),
+                )
+            })?);
+            self.add_start(32)?;
+        }
+        Ok(entries)
     }
 }
