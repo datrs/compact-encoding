@@ -4,6 +4,9 @@
 
 //! # Series of compact encoding schemes for building small and fast parsers and serializers
 //!
+//! Binary compatible with the
+//! [original Javascript compact-encoding library](https://github.com/compact-encoding/compact-encoding/).
+//!
 //! ## Usage
 //!
 //! ### Basic
