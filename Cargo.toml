@@ -11,7 +11,7 @@ keywords = ["dat", "encoding"]
 categories = [
   "encoding",
 ]
-edition = "2018"
+edition = "2021"
 
 [dev-dependencies]
 criterion = "0.4"
