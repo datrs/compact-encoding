@@ -190,7 +190,7 @@ impl CompactEncoding<Vec<[u8; 32]>> for State {
             entries.push(buffer[range].try_into().map_err(|err| {
                 EncodingError::new(
                     EncodingErrorKind::InvalidData,
-                    &format!("Could not convert byte slice to [u8; 32], {}", err),
+                    &format!("Could not convert byte slice to [u8; 32], {err}"),
                 )
             })?);
             self.add_start(32)?;

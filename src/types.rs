@@ -52,9 +52,9 @@ impl From<EncodingError> for std::io::Error {
     fn from(e: EncodingError) -> Self {
         match e.kind {
             EncodingErrorKind::InvalidData => {
-                std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{}", e))
+                std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{e}"))
             }
-            _ => std::io::Error::new(std::io::ErrorKind::Other, format!("{}", e)),
+            _ => std::io::Error::new(std::io::ErrorKind::Other, format!("{e}")),
         }
     }
 }
@@ -294,7 +294,7 @@ impl State {
         let value = std::str::from_utf8(&buffer[range]).map_err(|err| {
             EncodingError::new(
                 EncodingErrorKind::InvalidData,
-                &format!("String is invalid UTF-8, {}", err),
+                &format!("String is invalid UTF-8, {err}"),
             )
         })?;
         self.add_start(len)?;
