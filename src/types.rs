@@ -510,6 +510,28 @@ impl State {
         Ok(value)
     }
 
+    /// Preencode a fixed 16 byte buffer
+    pub fn preencode_fixed_16(&mut self) -> Result<usize, EncodingError> {
+        self.add_end(16)
+    }
+
+    /// Encode a fixed 16 byte buffer
+    pub fn encode_fixed_16(
+        &mut self,
+        value: &[u8],
+        buffer: &mut [u8],
+    ) -> Result<usize, EncodingError> {
+        self.set_slice_to_buffer_fixed(value, buffer, 16)
+    }
+
+    /// Decode a fixed 16 byte buffer
+    pub fn decode_fixed_16(&mut self, buffer: &[u8]) -> Result<Box<[u8]>, EncodingError> {
+        let range = self.validate(16, buffer)?;
+        let value = buffer[range].to_vec().into_boxed_slice();
+        self.add_start(16)?;
+        Ok(value)
+    }
+
     /// Preencode a fixed 32 byte buffer
     pub fn preencode_fixed_32(&mut self) -> Result<usize, EncodingError> {
         self.add_end(32)

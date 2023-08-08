@@ -176,22 +176,27 @@ fn cenc_string_array() -> Result<(), EncodingError> {
 
 #[test]
 fn cenc_fixed_and_raw() -> Result<(), EncodingError> {
-    let buf_value_1: Vec<u8> = vec![0xFF; 32];
-    let buf_value_2: Vec<u8> = vec![0xFF, 0x11, 0x99];
+    let buf_value_1: Vec<u8> = vec![0xEE; 16];
+    let buf_value_2: Vec<u8> = vec![0xFF; 32];
+    let buf_value_3: Vec<u8> = vec![0xFF, 0x11, 0x99];
     let mut enc_state = State::new();
+    enc_state.preencode_fixed_16()?;
     enc_state.preencode_fixed_32()?;
-    enc_state.preencode_raw_buffer(&buf_value_2)?;
+    enc_state.preencode_raw_buffer(&buf_value_3)?;
     let mut buffer = enc_state.create_buffer();
-    // 32 bytes for data
+    // 16 + 32 bytes for data
     // 3 bytes for data
-    assert_eq!(buffer.len(), 32 + 3);
-    enc_state.encode_fixed_32(&buf_value_1, &mut buffer)?;
-    enc_state.encode_raw_buffer(&buf_value_2, &mut buffer)?;
+    assert_eq!(buffer.len(), 16 + 32 + 3);
+    enc_state.encode_fixed_16(&buf_value_1, &mut buffer)?;
+    enc_state.encode_fixed_32(&buf_value_2, &mut buffer)?;
+    enc_state.encode_raw_buffer(&buf_value_3, &mut buffer)?;
     let mut dec_state = State::from_buffer(&buffer);
-    let buf_value_1_ret: Vec<u8> = dec_state.decode_fixed_32(&buffer)?.to_vec();
-    let buf_value_2_ret: Vec<u8> = dec_state.decode_raw_buffer(&buffer)?;
+    let buf_value_1_ret: Vec<u8> = dec_state.decode_fixed_16(&buffer)?.to_vec();
+    let buf_value_2_ret: Vec<u8> = dec_state.decode_fixed_32(&buffer)?.to_vec();
+    let buf_value_3_ret: Vec<u8> = dec_state.decode_raw_buffer(&buffer)?;
     assert_eq!(buf_value_1, buf_value_1_ret);
     assert_eq!(buf_value_2, buf_value_2_ret);
+    assert_eq!(buf_value_3, buf_value_3_ret);
     Ok(())
 }
 
