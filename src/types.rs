@@ -566,6 +566,98 @@ impl State {
         Ok(value)
     }
 
+    /// Preencode an u32 array
+    pub fn preencode_u32_array(&mut self, value: &Vec<u32>) -> Result<usize, EncodingError> {
+        let len = value.len();
+        self.preencode_usize_var(&len)?;
+        let total_len = len.checked_mul(4).ok_or_else(|| {
+            EncodingError::new(
+                EncodingErrorKind::Overflow,
+                &format!(
+                    "Vec<u32> total length overflowed: {} * 4 > {}",
+                    len,
+                    usize::MAX
+                ),
+            )
+        })?;
+        self.add_end(total_len)
+    }
+
+    /// Encode an u32 array
+    pub fn encode_u32_array(
+        &mut self,
+        value: &Vec<u32>,
+        buffer: &mut [u8],
+    ) -> Result<usize, EncodingError> {
+        let len = value.len();
+        self.encode_usize_var(&len, buffer)?;
+        for entry in value {
+            self.encode_u32(*entry, buffer)?;
+        }
+        Ok(self.start())
+    }
+
+    /// Decode an u32 array
+    pub fn decode_u32_array(&mut self, buffer: &[u8]) -> Result<Vec<u32>, EncodingError> {
+        let len = self.decode_usize_var(buffer)?;
+        let mut value: Vec<u32> = Vec::with_capacity(len);
+        for _ in 0..len {
+            value.push(self.decode_u32(buffer)?);
+        }
+        Ok(value)
+    }
+
+    /// Preencode a fixed 32 byte value array
+    pub fn preencode_fixed_32_array(
+        &mut self,
+        value: &Vec<[u8; 32]>,
+    ) -> Result<usize, EncodingError> {
+        let len = value.len();
+        self.preencode(&len)?;
+        let size = len.checked_mul(32).ok_or_else(|| {
+            EncodingError::new(
+                EncodingErrorKind::Overflow,
+                &format!(
+                    "Vec<[u8; 32]> byte size overflowed: {} * 32 > {}",
+                    len,
+                    usize::MAX
+                ),
+            )
+        })?;
+        self.add_end(size)?;
+        Ok(self.end())
+    }
+
+    /// Encode a fixed 32 byte value array
+    pub fn encode_fixed_32_array(
+        &mut self,
+        value: &Vec<[u8; 32]>,
+        buffer: &mut [u8],
+    ) -> Result<usize, EncodingError> {
+        self.encode(&value.len(), buffer)?;
+        for entry in value {
+            self.set_slice_to_buffer_fixed(entry, buffer, 32)?;
+        }
+        Ok(self.start())
+    }
+
+    /// Decode a fixed 32 byte value array
+    pub fn decode_fixed_32_array(&mut self, buffer: &[u8]) -> Result<Vec<[u8; 32]>, EncodingError> {
+        let len: usize = self.decode(buffer)?;
+        let mut entries: Vec<[u8; 32]> = Vec::with_capacity(len);
+        for _ in 0..len {
+            let range = self.validate(32, buffer)?;
+            entries.push(buffer[range].try_into().map_err(|err| {
+                EncodingError::new(
+                    EncodingErrorKind::InvalidData,
+                    &format!("Could not convert byte slice to [u8; 32], {err}"),
+                )
+            })?);
+            self.add_start(32)?;
+        }
+        Ok(entries)
+    }
+
     /// Preencode a variable length usize
     pub fn preencode_usize_var(&mut self, value: &usize) -> Result<usize, EncodingError> {
         // This repeats the logic from above that works for u8 -> u64, but sadly not usize
