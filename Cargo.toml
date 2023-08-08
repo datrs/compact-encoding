@@ -1,6 +1,6 @@
 [package]
 name = "compact-encoding"
-version = "1.0.0"
+version = "1.1.0"
 license = "MIT OR Apache-2.0"
 description = "A series of compact encoding schemes for building small and fast parsers and serializers"
 documentation = "https://docs.rs/compact-encoding"
