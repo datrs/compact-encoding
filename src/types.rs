@@ -744,6 +744,12 @@ impl State {
         }
     }
 
+    /// Encode a u16
+    /// TODO should it be encode_uINT16?
+    pub fn encode_u16(&mut self, uint: u16, buffer: &mut [u8]) -> Result<usize, EncodingError> {
+        self.set_slice_to_buffer(&uint.to_le_bytes(), buffer)
+    }
+
     /// Encode a 2 byte unsigned integer. NB: assumes `bytes` buffer large enough, hence not public!
     fn encode_uint16_bytes(
         &mut self,
@@ -772,6 +778,27 @@ impl State {
         self.encode_uint32_bytes(bytes, buffer)?;
         self.set_slice_to_buffer(&bytes[4..8], buffer)
     }
+
+    fn preencode_t<T: CompactEncodable>(&mut self, value: &T) -> Result<usize, EncodingError> {
+        let size = value.encoded_size().map_err(|e| e.into())?;
+        let out = self.add_end(size)?;
+        Ok(out)
+    }
+
+    fn encode_t<T: CompactEncodable>(
+        &mut self,
+        value: &T,
+        buffer: &mut [u8],
+    ) -> Result<usize, EncodingError> {
+        let bytes = value.encoded_bytes().map_err(|e| e.into())?;
+        self.set_slice_to_buffer(&bytes, buffer)
+    }
+
+    fn decode_t<T: CompactEncodable>(&mut self, buffer: &[u8]) -> Result<T, EncodingError> {
+        let out = T::decode(buffer).map_err(|e| e.into())?;
+        self.add_start(out.encoded_size().map_err(|e| e.into())?)?;
+        Ok(out)
+    }
 }
 
 /// Compact Encoding
@@ -787,4 +814,34 @@ where
 
     /// Decode
     fn decode(&mut self, buffer: &[u8]) -> Result<T, EncodingError>;
+}
+
+impl<T: CompactEncodable + std::fmt::Debug> CompactEncoding<T> for State {
+    fn preencode(&mut self, value: &T) -> Result<usize, EncodingError> {
+        self.preencode_t(value)
+    }
+
+    fn encode(&mut self, value: &T, buffer: &mut [u8]) -> Result<usize, EncodingError> {
+        self.encode_t(value, buffer)
+    }
+
+    fn decode(&mut self, buffer: &[u8]) -> Result<T, EncodingError> {
+        self.decode_t(buffer)
+    }
+}
+
+/// Implement this trait on a type and it can be used with:
+/// State::preencode/encode/decode
+pub trait CompactEncodable {
+    /// Error type that occors when pre/enc/decoding
+    type Error: std::error::Error + Into<EncodingError>;
+
+    /// The size required in the buffer for this time
+    fn encoded_size(&self) -> Result<usize, Self::Error>;
+    /// The bytes resulting from encoding this type
+    fn encoded_bytes(&self) -> Result<Vec<u8>, Self::Error>;
+    /// Decode a value from the buffer
+    fn decode(buffer: &[u8]) -> Result<Self, Self::Error>
+    where
+        Self: Sized;
 }
