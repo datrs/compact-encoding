@@ -306,15 +306,7 @@ impl State {
         &mut self,
         uint: &T,
     ) -> Result<usize, EncodingError> {
-        let increment: usize = if *uint < T::from(U16_SIGNIFIER.into()) {
-            1
-        } else if *uint <= T::from(0xffff) {
-            3
-        } else if *uint <= T::from(0xffffffff) {
-            5
-        } else {
-            9
-        };
+        let increment = uint_var_encoded_size(uint);
         self.add_end(increment)
     }
 
@@ -795,13 +787,19 @@ impl State {
     }
 
     fn decode_t<T: CompactEncodable>(&mut self, buffer: &[u8]) -> Result<T, EncodingError> {
-        let out = T::decode(buffer).map_err(|e| e.into())?;
-        self.add_start(out.encoded_size().map_err(|e| e.into())?)?;
-        Ok(out)
+        let (result, remaining_buffer) = T::decode(buffer).map_err(|e| e.into())?;
+        let before = buffer.len();
+        let after = remaining_buffer.len();
+        if after > before {
+            todo!()
+        }
+        self.add_start(before - after)?;
+        Ok(result)
     }
 }
 
-/// Compact Encoding
+/// Compact Encoding. You must implement `CompactEncoding<T>` where T is the type to be encoded.
+/// The trait must be implemented for [`State`].
 pub trait CompactEncoding<T>
 where
     T: fmt::Debug,
@@ -830,18 +828,149 @@ impl<T: CompactEncodable + std::fmt::Debug> CompactEncoding<T> for State {
     }
 }
 
+fn uint_var_encoded_size<T: From<u32> + Ord>(uint: &T) -> usize {
+    if *uint < T::from(U16_SIGNIFIER.into()) {
+        1
+    } else if *uint <= T::from(0xffff) {
+        3
+    } else if *uint <= T::from(0xffffffff) {
+        5
+    } else {
+        9
+    }
+}
+
+fn usize_encoded_bytes(uint: usize) -> Vec<u8> {
+    if uint < U16_SIGNIFIER.into() {
+        uint.to_le_bytes().to_vec()
+    } else if uint <= 0xffff {
+        let mut out = vec![U16_SIGNIFIER];
+        out.extend(uint.to_le_bytes());
+        out
+    } else if uint <= 0xffffffff {
+        let mut out = vec![U32_SIGNIFIER];
+        out.extend(uint.to_le_bytes());
+        out
+    } else {
+        let mut out = vec![U64_SIGNIFIER];
+        out.extend(uint.to_le_bytes());
+        out
+    }
+}
+
+fn decode_u16(buffer: &[u8]) -> Result<(u16, &[u8]), EncodingError> {
+    let [one, two, rest @ ..] = buffer else {
+        todo!()
+    };
+    let value: u16 = (*one as u16) | ((*two as u16) << 8);
+    Ok((value, rest))
+}
+
+fn decode_u32(buffer: &[u8]) -> Result<(u32, &[u8]), EncodingError> {
+    let [one, two, three, four, rest @ ..] = buffer else {
+        return Err(EncodingError::new(
+            EncodingErrorKind::Overflow,
+            "Not enough bytes to decode u32",
+        ));
+    };
+    let value: u32 =
+        (*one as u32) | ((*two as u32) << 8) | ((*three as u32) << 16) | ((*four as u32) << 24);
+    Ok((value, rest))
+}
+
+fn decode_u64(buffer: &[u8]) -> Result<(u64, &[u8]), EncodingError> {
+    let [one, two, three, four, five, six, seven, eight, rest @ ..] = buffer else {
+        return Err(EncodingError::new(
+            EncodingErrorKind::Overflow,
+            "Not enough bytes to decode u64",
+        ));
+    };
+    let value: u64 = (*one as u64)
+        | ((*two as u64) << 8)
+        | ((*three as u64) << 16)
+        | ((*four as u64) << 24)
+        | ((*five as u64) << 32)
+        | ((*six as u64) << 40)
+        | ((*seven as u64) << 48)
+        | ((*eight as u64) << 56);
+    Ok((value, rest))
+}
+
+fn usize_decode(buffer: &[u8]) -> Result<(usize, &[u8]), EncodingError> {
+    let [first, rest @ ..] = buffer else {
+        todo!("silec had zero bytes")
+    };
+    let first = *first;
+    if first < U16_SIGNIFIER {
+        Ok((first.into(), rest))
+    } else if first == U16_SIGNIFIER {
+        let (out, rest) = decode_u16(buffer)?;
+        return Ok((out.into(), rest));
+    } else if first == U32_SIGNIFIER {
+        let (out, rest) = decode_u32(buffer)?;
+        let out: usize = out.try_into().map_err(|_e| {
+            EncodingError::new(EncodingErrorKind::Overflow, "u32 is bigger than usize")
+        })?;
+        return Ok((out, rest));
+    } else {
+        let (out, rest) = decode_u64(buffer)?;
+        let out: usize = out.try_into().map_err(|_e| {
+            EncodingError::new(EncodingErrorKind::Overflow, "u64 is bigger than usize")
+        })?;
+        return Ok((out, rest));
+    }
+}
+
 /// Implement this trait on a type and it can be used with:
 /// State::preencode/encode/decode
 pub trait CompactEncodable {
     /// Error type that occors when pre/enc/decoding
-    type Error: std::error::Error + Into<EncodingError>;
+    type Error: std::error::Error + From<EncodingError> + Into<EncodingError>;
 
     /// The size required in the buffer for this time
     fn encoded_size(&self) -> Result<usize, Self::Error>;
     /// The bytes resulting from encoding this type
     fn encoded_bytes(&self) -> Result<Vec<u8>, Self::Error>;
     /// Decode a value from the buffer
-    fn decode(buffer: &[u8]) -> Result<Self, Self::Error>
+    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), Self::Error>
     where
         Self: Sized;
+}
+
+impl<T: CompactEncodable + std::fmt::Debug> CompactEncodable for Vec<T> {
+    type Error = T::Error;
+
+    fn encoded_size(&self) -> Result<usize, Self::Error> {
+        let mut size = uint_var_encoded_size(&(self.len() as u32));
+        for item in self.iter() {
+            size += item.encoded_size()?;
+        }
+        Ok(size)
+    }
+
+    fn encoded_bytes(&self) -> Result<Vec<u8>, Self::Error> {
+        let mut out = vec![];
+        out.extend(usize_encoded_bytes(self.len()));
+        for item in self.iter() {
+            out.extend(item.encoded_bytes()?);
+        }
+        Ok(out)
+    }
+
+    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), Self::Error>
+    where
+        Self: Sized,
+    {
+        let (length, mut rest) = usize_decode(buffer).map_err(|_e| todo!())?;
+        if length > 0x100000 {
+            todo!()
+        }
+        let mut out = vec![];
+        for _ in 0..length {
+            let result: (T, &[u8]) = <T as CompactEncodable>::decode(rest)?;
+            rest = result.1;
+            out.push(result.0);
+        }
+        Ok((out, rest))
+    }
 }
