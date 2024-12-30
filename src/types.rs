@@ -782,8 +782,10 @@ impl State {
         value: &T,
         buffer: &mut [u8],
     ) -> Result<usize, EncodingError> {
-        let bytes = value.encoded_bytes().map_err(|e| e.into())?;
-        self.set_slice_to_buffer(&bytes, buffer)
+        let start_len = buffer.len();
+        let rest = value.encoded_bytes(buffer).map_err(|e| e.into())?;
+        let offset = start_len - rest.len();
+        self.add_start(offset)
     }
 
     fn decode_t<T: CompactEncodable>(&mut self, buffer: &[u8]) -> Result<T, EncodingError> {
@@ -840,22 +842,45 @@ fn uint_var_encoded_size<T: From<u32> + Ord>(uint: &T) -> usize {
     }
 }
 
-fn usize_encoded_bytes(uint: usize) -> Vec<u8> {
+fn usize_encoded_bytes(uint: usize, buffer: &mut [u8]) -> Result<&mut [u8], EncodingError> {
     if uint < U16_SIGNIFIER.into() {
-        uint.to_le_bytes().to_vec()
+        encode_u8(uint as u8, buffer)
     } else if uint <= 0xffff {
-        let mut out = vec![U16_SIGNIFIER];
-        out.extend(uint.to_le_bytes());
-        out
+        let Some((sig, rest)) = buffer.split_first_chunk_mut::<1>() else {
+            todo!()
+        };
+        sig[0] = U16_SIGNIFIER;
+        encode_u16(uint as u16, rest)
     } else if uint <= 0xffffffff {
-        let mut out = vec![U32_SIGNIFIER];
-        out.extend(uint.to_le_bytes());
-        out
+        let Some((sig, rest)) = buffer.split_first_chunk_mut::<1>() else {
+            todo!()
+        };
+        sig[0] = U32_SIGNIFIER;
+        encode_u32(uint as u32, rest)
     } else {
-        let mut out = vec![U64_SIGNIFIER];
-        out.extend(uint.to_le_bytes());
-        out
+        let Some((sig, rest)) = buffer.split_first_chunk_mut::<1>() else {
+            todo!()
+        };
+        sig[0] = U64_SIGNIFIER;
+        encode_u64(uint as u64, rest)
     }
+}
+
+fn encode_u8(val: u8, buffer: &mut [u8]) -> Result<&mut [u8], EncodingError> {
+    let b = val.to_le_bytes();
+    let Some((target, rest)) = buffer.split_first_chunk_mut::<1>() else {
+        todo!()
+    };
+    target.copy_from_slice(&b);
+    Ok(rest)
+}
+fn encode_u16(val: u16, buffer: &mut [u8]) -> Result<&mut [u8], EncodingError> {
+    let b = val.to_le_bytes();
+    let Some((target, rest)) = buffer.split_first_chunk_mut::<2>() else {
+        todo!()
+    };
+    target.copy_from_slice(&b);
+    Ok(rest)
 }
 
 fn decode_u16(buffer: &[u8]) -> Result<(u16, &[u8]), EncodingError> {
@@ -864,6 +889,15 @@ fn decode_u16(buffer: &[u8]) -> Result<(u16, &[u8]), EncodingError> {
     };
     let value: u16 = (*one as u16) | ((*two as u16) << 8);
     Ok((value, rest))
+}
+
+fn encode_u32(val: u32, buffer: &mut [u8]) -> Result<&mut [u8], EncodingError> {
+    let b = val.to_le_bytes();
+    let Some((target, rest)) = buffer.split_first_chunk_mut::<4>() else {
+        todo!()
+    };
+    target.copy_from_slice(&b);
+    Ok(rest)
 }
 
 fn decode_u32(buffer: &[u8]) -> Result<(u32, &[u8]), EncodingError> {
@@ -878,6 +912,14 @@ fn decode_u32(buffer: &[u8]) -> Result<(u32, &[u8]), EncodingError> {
     Ok((value, rest))
 }
 
+fn encode_u64(val: u64, buffer: &mut [u8]) -> Result<&mut [u8], EncodingError> {
+    let b = val.to_le_bytes();
+    let Some((target, rest)) = buffer.split_first_chunk_mut::<8>() else {
+        todo!()
+    };
+    target.copy_from_slice(&b);
+    Ok(rest)
+}
 fn decode_u64(buffer: &[u8]) -> Result<(u64, &[u8]), EncodingError> {
     let [one, two, three, four, five, six, seven, eight, rest @ ..] = buffer else {
         return Err(EncodingError::new(
@@ -927,8 +969,9 @@ pub trait CompactEncodable {
     /// The size required in the buffer for this time
     fn encoded_size(&self) -> Result<usize, EncodingError>;
     /// The bytes resulting from encoding this type
-    fn encoded_bytes(&self) -> Result<Vec<u8>, EncodingError>;
-    /// Decode a value from the buffer
+    // TODO add buffer argument. Change result to return remaining buffer
+    fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError>;
+    /// Decode a value from the buffer. Returns the value  and remaining undecoded bytes
     fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
     where
         Self: Sized;
@@ -943,15 +986,13 @@ impl<T: CompactEncodable + std::fmt::Debug> CompactEncodable for Vec<T> {
         Ok(size)
     }
 
-    fn encoded_bytes(&self) -> Result<Vec<u8>, EncodingError> {
-        let mut out = vec![];
-        out.extend(usize_encoded_bytes(self.len()));
+    fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+        let mut rest = usize_encoded_bytes(self.len(), buffer)?;
         for item in self.iter() {
-            out.extend(item.encoded_bytes()?);
+            rest = item.encoded_bytes(rest)?;
         }
-        Ok(out)
+        Ok(rest)
     }
-
     fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
     where
         Self: Sized,
