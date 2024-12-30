@@ -924,23 +924,18 @@ fn usize_decode(buffer: &[u8]) -> Result<(usize, &[u8]), EncodingError> {
 /// Implement this trait on a type and it can be used with:
 /// State::preencode/encode/decode
 pub trait CompactEncodable {
-    /// Error type that occors when pre/enc/decoding
-    type Error: std::error::Error + From<EncodingError> + Into<EncodingError>;
-
     /// The size required in the buffer for this time
-    fn encoded_size(&self) -> Result<usize, Self::Error>;
+    fn encoded_size(&self) -> Result<usize, EncodingError>;
     /// The bytes resulting from encoding this type
-    fn encoded_bytes(&self) -> Result<Vec<u8>, Self::Error>;
+    fn encoded_bytes(&self) -> Result<Vec<u8>, EncodingError>;
     /// Decode a value from the buffer
-    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), Self::Error>
+    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
     where
         Self: Sized;
 }
 
 impl<T: CompactEncodable + std::fmt::Debug> CompactEncodable for Vec<T> {
-    type Error = T::Error;
-
-    fn encoded_size(&self) -> Result<usize, Self::Error> {
+    fn encoded_size(&self) -> Result<usize, EncodingError> {
         let mut size = uint_var_encoded_size(&(self.len() as u32));
         for item in self.iter() {
             size += item.encoded_size()?;
@@ -948,7 +943,7 @@ impl<T: CompactEncodable + std::fmt::Debug> CompactEncodable for Vec<T> {
         Ok(size)
     }
 
-    fn encoded_bytes(&self) -> Result<Vec<u8>, Self::Error> {
+    fn encoded_bytes(&self) -> Result<Vec<u8>, EncodingError> {
         let mut out = vec![];
         out.extend(usize_encoded_bytes(self.len()));
         for item in self.iter() {
@@ -957,7 +952,7 @@ impl<T: CompactEncodable + std::fmt::Debug> CompactEncodable for Vec<T> {
         Ok(out)
     }
 
-    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), Self::Error>
+    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
     where
         Self: Sized,
     {
