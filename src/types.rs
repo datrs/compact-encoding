@@ -1,6 +1,7 @@
 //! Basic types of compact_encoding.
 use std::convert::TryFrom;
 use std::fmt;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::ops::Range;
 
 const U16_SIGNIFIER: u8 = 0xfd;
@@ -306,7 +307,15 @@ impl State {
         &mut self,
         uint: &T,
     ) -> Result<usize, EncodingError> {
-        let increment = uint_var_encoded_size(uint);
+        let increment = if uint < &T::from(u32::from(U16_SIGNIFIER)) {
+            1
+        } else if uint <= &(0xffff.into()) {
+            3
+        } else if uint <= &(0xffffffff.into()) {
+            5
+        } else {
+            9
+        };
         self.add_end(increment)
     }
 
@@ -830,19 +839,21 @@ impl<T: CompactEncodable + std::fmt::Debug> CompactEncoding<T> for State {
     }
 }
 
-fn uint_var_encoded_size<T: From<u32> + Ord>(uint: &T) -> usize {
-    if *uint < T::from(U16_SIGNIFIER.into()) {
+/// The number of bytes required to encode this number
+pub fn usize_encoded_size(val: usize) -> usize {
+    if val < U16_SIGNIFIER.into() {
         1
-    } else if *uint <= T::from(0xffff) {
+    } else if val <= 0xffff {
         3
-    } else if *uint <= T::from(0xffffffff) {
+    } else if val <= 0xffffffff {
         5
     } else {
         9
     }
 }
 
-fn usize_encoded_bytes(uint: usize, buffer: &mut [u8]) -> Result<&mut [u8], EncodingError> {
+/// Write `uint` to the start of `buffer` and return the remaining part of `buffer`.
+pub fn usize_encoded_bytes(uint: usize, buffer: &mut [u8]) -> Result<&mut [u8], EncodingError> {
     if uint < U16_SIGNIFIER.into() {
         encode_u8(uint as u8, buffer)
     } else if uint <= 0xffff {
@@ -938,7 +949,8 @@ fn decode_u64(buffer: &[u8]) -> Result<(u64, &[u8]), EncodingError> {
     Ok((value, rest))
 }
 
-fn usize_decode(buffer: &[u8]) -> Result<(usize, &[u8]), EncodingError> {
+/// decode a `usize` from `buffer` and return the remaining bytes
+pub fn usize_decode(buffer: &[u8]) -> Result<(usize, &[u8]), EncodingError> {
     let [first, rest @ ..] = buffer else {
         todo!("silec had zero bytes")
     };
@@ -979,7 +991,7 @@ pub trait CompactEncodable {
 
 impl<T: CompactEncodable + std::fmt::Debug> CompactEncodable for Vec<T> {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
-        let mut size = uint_var_encoded_size(&(self.len() as u32));
+        let mut size = usize_encoded_size(self.len());
         for item in self.iter() {
             size += item.encoded_size()?;
         }
