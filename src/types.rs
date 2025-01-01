@@ -1022,3 +1022,78 @@ impl<T: CompactEncodable + std::fmt::Debug> CompactEncodable for Vec<T> {
         Ok((out, rest))
     }
 }
+
+impl CompactEncodable for Ipv4Addr {
+    fn encoded_size(&self) -> std::result::Result<usize, EncodingError> {
+        Ok(4)
+    }
+
+    fn encoded_bytes<'a>(
+        &self,
+        buffer: &'a mut [u8],
+    ) -> std::result::Result<&'a mut [u8], EncodingError> {
+        let Some((dest, rest)) = buffer.split_first_chunk_mut::<4>() else {
+            todo!()
+        };
+        dest.copy_from_slice(&self.octets());
+        Ok(rest)
+    }
+
+    fn decode(buffer: &[u8]) -> std::result::Result<(Self, &[u8]), EncodingError>
+    where
+        Self: Sized,
+    {
+        let Some((dest, rest)) = buffer.split_first_chunk::<4>() else {
+            todo!()
+        };
+        Ok((Ipv4Addr::from(*dest), rest))
+    }
+}
+impl CompactEncodable for Ipv6Addr {
+    fn encoded_size(&self) -> std::result::Result<usize, EncodingError> {
+        Ok(4)
+    }
+
+    fn encoded_bytes<'a>(
+        &self,
+        buffer: &'a mut [u8],
+    ) -> std::result::Result<&'a mut [u8], EncodingError> {
+        let Some((dest, rest)) = buffer.split_first_chunk_mut::<16>() else {
+            todo!()
+        };
+        dest.copy_from_slice(&self.octets());
+        Ok(rest)
+    }
+
+    fn decode(buffer: &[u8]) -> std::result::Result<(Self, &[u8]), EncodingError>
+    where
+        Self: Sized,
+    {
+        let Some((dest, rest)) = buffer.split_first_chunk::<16>() else {
+            todo!()
+        };
+        Ok((Ipv6Addr::from(*dest), rest))
+    }
+}
+
+/// Write `source` to `buffer` and return the remainder of `buffer`.
+pub fn write_array<'a, const N: usize>(
+    source: &[u8; N],
+    buffer: &'a mut [u8],
+) -> std::result::Result<&'a mut [u8], EncodingError> {
+    let Some((dest, rest)) = buffer.split_first_chunk_mut::<N>() else {
+        todo!()
+    };
+    dest.copy_from_slice(source);
+    Ok(rest)
+}
+
+/// split the first `N` bytes of `buffer` off and return them
+pub fn take_array<const N: usize>(
+    buffer: &[u8],
+) -> std::result::Result<([u8; N], &[u8]), EncodingError> {
+    let Some((out, rest)) = buffer.split_first_chunk::<N>() else {
+        todo!()
+    };
+    Ok((*out, rest))
+}
