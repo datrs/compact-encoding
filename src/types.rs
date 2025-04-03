@@ -455,7 +455,7 @@ impl State {
     }
 
     /// Preencode a vector byte buffer
-    pub fn preencode_buffer_vec(&mut self, value: &Vec<u8>) -> Result<usize, EncodingError> {
+    pub fn preencode_buffer_vec(&mut self, value: &[u8]) -> Result<usize, EncodingError> {
         let len = value.len();
         self.preencode_usize_var(&len)?;
         self.add_end(len)
@@ -488,7 +488,7 @@ impl State {
 
     /// Preencode a raw byte buffer. Only possible to use if this is the last value
     /// of the State.
-    pub fn preencode_raw_buffer(&mut self, value: &Vec<u8>) -> Result<usize, EncodingError> {
+    pub fn preencode_raw_buffer(&mut self, value: &[u8]) -> Result<usize, EncodingError> {
         self.add_end(value.len())
     }
 
@@ -562,7 +562,7 @@ impl State {
     }
 
     /// Preencode a string array
-    pub fn preencode_string_array(&mut self, value: &Vec<String>) -> Result<usize, EncodingError> {
+    pub fn preencode_string_array(&mut self, value: &[String]) -> Result<usize, EncodingError> {
         let len = value.len();
         self.preencode_usize_var(&len)?;
         for string_value in value.iter() {
@@ -596,7 +596,7 @@ impl State {
     }
 
     /// Preencode an u32 array
-    pub fn preencode_u32_array(&mut self, value: &Vec<u32>) -> Result<usize, EncodingError> {
+    pub fn preencode_u32_array(&mut self, value: &[u32]) -> Result<usize, EncodingError> {
         let len = value.len();
         self.preencode_usize_var(&len)?;
         let total_len = len.checked_mul(4).ok_or_else(|| {
@@ -637,10 +637,7 @@ impl State {
     }
 
     /// Preencode a fixed 32 byte value array
-    pub fn preencode_fixed_32_array(
-        &mut self,
-        value: &Vec<[u8; 32]>,
-    ) -> Result<usize, EncodingError> {
+    pub fn preencode_fixed_32_array(&mut self, value: &[[u8; 32]]) -> Result<usize, EncodingError> {
         let len = value.len();
         self.preencode(&len)?;
         let size = len.checked_mul(32).ok_or_else(|| {
