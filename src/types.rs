@@ -9,7 +9,7 @@ const U32_SIGNIFIER: u8 = 0xfe;
 const U64_SIGNIFIER: u8 = 0xff;
 
 /// Specific type [EncodingError]
-#[derive(fmt::Debug)]
+#[derive(fmt::Debug, Clone, PartialEq)]
 pub enum EncodingErrorKind {
     /// Encoding or decoding did not stay between [State] `start` and `end`.
     OutOfBounds,
@@ -20,12 +20,18 @@ pub enum EncodingErrorKind {
 }
 
 /// Encoding/decoding error.
-#[derive(fmt::Debug)]
+#[derive(fmt::Debug, Clone, PartialEq)]
 pub struct EncodingError {
     /// Specific type of error
     pub kind: EncodingErrorKind,
     /// Message for the error
     pub message: String,
+}
+
+impl std::error::Error for EncodingError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
 }
 
 impl EncodingError {
