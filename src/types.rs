@@ -981,8 +981,11 @@ pub fn usize_decode(buffer: &[u8]) -> Result<(usize, &[u8]), EncodingError> {
     }
 }
 
-/// Implement this trait on a type and it can be used with:
-/// State::preencode/encode/decode
+/// Instead of carrying around [`State`] we just use a buffer.
+/// To track how much buffer is used (like we do with [`State::start`])
+/// we return a slice of the unused portion after encoding.
+///
+/// If you Implement this trait on a type then it will automatically implement [`CompactEncoding`].
 pub trait CompactEncodable {
     /// The size required in the buffer for this time
     fn encoded_size(&self) -> Result<usize, EncodingError>;
@@ -993,6 +996,21 @@ pub trait CompactEncodable {
     fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
     where
         Self: Sized;
+
+    /// Encode `self` into a `Vec<u8>`. This is just a helper method for:
+    /// ```
+    /// # use std::net::Ipv4Addr;
+    /// # use compact_encoding::types::CompactEncodable;
+    /// let foo: Ipv4Addr = "0.0.0.0".parse()?;
+    /// let mut buff = vec![0; foo.encoded_size()?];
+    /// foo.encoded_bytes(&mut buff)?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    fn to_bytes(&self) -> Result<Vec<u8>, EncodingError> {
+        let mut buff = vec![0; self.encoded_size()?];
+        self.encoded_bytes(&mut buff)?;
+        Ok(buff)
+    }
 }
 
 impl<T: CompactEncodable + std::fmt::Debug> CompactEncodable for Vec<T> {
@@ -1011,6 +1029,7 @@ impl<T: CompactEncodable + std::fmt::Debug> CompactEncodable for Vec<T> {
         }
         Ok(rest)
     }
+
     fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
     where
         Self: Sized,
@@ -1083,6 +1102,7 @@ impl CompactEncodable for Ipv6Addr {
 }
 
 /// Write `source` to `buffer` and return the remainder of `buffer`.
+/// Errors when `N < buffer.len()`
 pub fn write_array<'a, const N: usize>(
     source: &[u8; N],
     buffer: &'a mut [u8],
