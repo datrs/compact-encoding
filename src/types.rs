@@ -784,7 +784,7 @@ impl State {
     }
 
     fn preencode_t<T: CompactEncodable>(&mut self, value: &T) -> Result<usize, EncodingError> {
-        let size = value.encoded_size().map_err(|e| e.into())?;
+        let size = value.encoded_size()?;
         let out = self.add_end(size)?;
         Ok(out)
     }
@@ -795,19 +795,16 @@ impl State {
         buffer: &mut [u8],
     ) -> Result<usize, EncodingError> {
         let start_len = buffer.len();
-        let rest = value.encoded_bytes(buffer).map_err(|e| e.into())?;
+        let rest = value.encoded_bytes(buffer)?;
         let offset = start_len - rest.len();
         self.add_start(offset)
     }
 
     fn decode_t<T: CompactEncodable>(&mut self, buffer: &[u8]) -> Result<T, EncodingError> {
-        let (result, remaining_buffer) = T::decode(buffer).map_err(|e| e.into())?;
-        let before = buffer.len();
+        let start_len = buffer.len();
+        let (result, remaining_buffer) = T::decode(buffer)?;
         let after = remaining_buffer.len();
-        if after > before {
-            todo!()
-        }
-        self.add_start(before - after)?;
+        self.add_start(start_len - after)?;
         Ok(result)
     }
 }
@@ -1104,8 +1101,15 @@ pub fn write_array<'a, const N: usize>(
     source: &[u8; N],
     buffer: &'a mut [u8],
 ) -> std::result::Result<&'a mut [u8], EncodingError> {
+    let blen = buffer.len();
     let Some((dest, rest)) = buffer.split_first_chunk_mut::<N>() else {
-        todo!()
+        return Err(EncodingError::new(
+            EncodingErrorKind::OutOfBounds,
+            &format!(
+                "Could not write [{}] bytes to buffer of length [{}]",
+                N, blen
+            ),
+        ));
     };
     dest.copy_from_slice(source);
     Ok(rest)
@@ -1116,7 +1120,14 @@ pub fn take_array<const N: usize>(
     buffer: &[u8],
 ) -> std::result::Result<([u8; N], &[u8]), EncodingError> {
     let Some((out, rest)) = buffer.split_first_chunk::<N>() else {
-        todo!()
+        return Err(EncodingError::new(
+            EncodingErrorKind::OutOfBounds,
+            &format!(
+                "Could not write [{}] bytes to buffer of length [{}]",
+                N,
+                buffer.len()
+            ),
+        ));
     };
     Ok((*out, rest))
 }
