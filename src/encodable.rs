@@ -716,7 +716,7 @@ fn encode_vec<'a, T: CompactEncodable + Sized>(
     Ok(rest)
 }
 
-fn decode_vec<'a, T: CompactEncodable + Sized>(
+fn decode_vec<T: CompactEncodable + Sized>(
     buffer: &[u8],
 ) -> Result<(Vec<T>, &[u8]), EncodingError> {
     let (len, mut rest) = decode_usize_var(buffer)?;
@@ -755,6 +755,8 @@ impl VecEncodable for u32 {
     }
 }
 
+// NB: we DO want &Box<..> because we want the trait to work for  boxed things
+#[allow(clippy::borrowed_box)]
 /// Define this trait for `T` to get `Box<[T]>: CompactEncodable`
 pub trait BoxArrayEncodable: CompactEncodable {
     /// The encoded size in bytes
