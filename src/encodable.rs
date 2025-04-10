@@ -1,6 +1,9 @@
 #![allow(unused)]
 //! CompactEncodable stuff
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::{
+    any::type_name,
+    net::{Ipv4Addr, Ipv6Addr},
+};
 
 use crate::{
     types::{U16_SIGNIFIER, U32_SIGNIFIER, U64_SIGNIFIER},
@@ -9,11 +12,10 @@ use crate::{
 
 const U16_SIZE: usize = 2;
 const U32_SIZE: usize = 4;
+
 /// Instead of carrying around [`State`] we just use a buffer.
 /// To track how much buffer is used (like we do with [`State::start`])
 /// we return a slice of the unused portion after encoding.
-///
-/// If you Implement this trait on a type then it will automatically implement [`CompactEncoding`].
 pub trait CompactEncodable {
     /// The size required in the buffer for this time
     fn encoded_size(&self) -> Result<usize, EncodingError>;
@@ -105,7 +107,10 @@ impl CompactEncodable for Ipv4Addr {
         buffer: &'a mut [u8],
     ) -> std::result::Result<&'a mut [u8], EncodingError> {
         let Some((dest, rest)) = buffer.split_first_chunk_mut::<4>() else {
-            todo!()
+            return Err(EncodingError::out_of_bounds(&format!(
+                "Colud not encode {}, not enough room in buffer",
+                std::any::type_name::<Self>()
+            )));
         };
         dest.copy_from_slice(&self.octets());
         Ok(rest)
@@ -116,7 +121,10 @@ impl CompactEncodable for Ipv4Addr {
         Self: Sized,
     {
         let Some((dest, rest)) = buffer.split_first_chunk::<4>() else {
-            todo!()
+            return Err(EncodingError::out_of_bounds(&format!(
+                "Colud not decode {}, buffer not big enough",
+                std::any::type_name::<Self>()
+            )));
         };
         Ok((Ipv4Addr::from(*dest), rest))
     }
@@ -131,7 +139,10 @@ impl CompactEncodable for Ipv6Addr {
         buffer: &'a mut [u8],
     ) -> std::result::Result<&'a mut [u8], EncodingError> {
         let Some((dest, rest)) = buffer.split_first_chunk_mut::<16>() else {
-            todo!()
+            return Err(EncodingError::out_of_bounds(&format!(
+                "Colud not encode {}, not enough room in buffer",
+                std::any::type_name::<Self>()
+            )));
         };
         dest.copy_from_slice(&self.octets());
         Ok(rest)
@@ -142,7 +153,10 @@ impl CompactEncodable for Ipv6Addr {
         Self: Sized,
     {
         let Some((dest, rest)) = buffer.split_first_chunk::<16>() else {
-            todo!()
+            return Err(EncodingError::out_of_bounds(&format!(
+                "Colud not decode {}, buffer not big enough",
+                std::any::type_name::<Self>()
+            )));
         };
         Ok((Ipv6Addr::from(*dest), rest))
     }
@@ -207,7 +221,9 @@ pub fn usize_encoded_bytes(uint: usize, buffer: &mut [u8]) -> Result<&mut [u8], 
 /// decode a `usize` from `buffer` and return the remaining bytes
 pub fn usize_decode(buffer: &[u8]) -> Result<(usize, &[u8]), EncodingError> {
     let [first, rest @ ..] = buffer else {
-        todo!("silec had zero bytes")
+        return Err(EncodingError::out_of_bounds(
+            "Colud not decode usize, empty buffer",
+        ));
     };
     let first = *first;
     if first < U16_SIGNIFIER {
@@ -737,7 +753,6 @@ impl<T: BoxArrayEncodable> CompactEncodable for Box<[T]> {
 }
 
 #[cfg(test)]
-#[allow(unused)]
 mod test {
     use super::*;
 
