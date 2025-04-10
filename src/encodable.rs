@@ -7,6 +7,8 @@ use crate::{
     EncodingError,
 };
 
+const U16_SIZE: usize = 2;
+const U32_SIZE: usize = 4;
 /// Instead of carrying around [`State`] we just use a buffer.
 /// To track how much buffer is used (like we do with [`State::start`])
 /// we return a slice of the unused portion after encoding.
@@ -95,7 +97,7 @@ pub trait BoxArrayEncodable: CompactEncodable {
 
 impl CompactEncodable for Ipv4Addr {
     fn encoded_size(&self) -> std::result::Result<usize, EncodingError> {
-        Ok(4)
+        Ok(U32_SIZE)
     }
 
     fn encoded_bytes<'a>(
@@ -301,50 +303,6 @@ pub fn write_slice<'a>(source: &[u8], buffer: &'a mut [u8]) -> Result<&'a mut [u
     Ok(rest)
 }
 
-/// Gives the encoded size of a type
-pub trait EncodedSize {
-    /// The encoded size of a value in bytes
-    fn encoded_size(&self) -> Result<usize, EncodingError>;
-}
-
-impl EncodedSize for usize {
-    fn encoded_size(&self) -> Result<usize, EncodingError> {
-        Ok(usize_encoded_size(*self))
-    }
-}
-
-/// Marker trait for types with sizes known at compile time
-pub trait ConstantSize {
-    /// The encoded size of the value in bytes.
-    const ENCODED_SIZE: usize;
-}
-
-impl<T: ConstantSize> EncodedSize for T {
-    fn encoded_size(&self) -> Result<usize, EncodingError> {
-        Ok(<Self as ConstantSize>::ENCODED_SIZE)
-    }
-}
-
-macro_rules! constant_sized {
-    // Process multiple type/size pairs separated by semicolons
-    (
-        $($type:ty, $size:expr);+ $(;)?
-    ) => {
-        $(
-            impl ConstantSize for $type {
-                const ENCODED_SIZE: usize = $size;
-            }
-        )+
-    };
-}
-
-constant_sized! {
-    u8, 1;
-    u16, 2;
-    u32, 4;
-    u64, 8;
-}
-
 fn encoded_size_str(value: &str) -> Result<usize, EncodingError> {
     Ok(usize_encoded_size(value.len()) + value.len())
 }
@@ -390,24 +348,6 @@ impl<const N: usize> CompactEncodable for [u8; N] {
         Self: Sized,
     {
         take_array(buffer)
-    }
-}
-
-impl<T: ConstantSize, const N: usize> ConstantSize for [T; N] {
-    const ENCODED_SIZE: usize = N * T::ENCODED_SIZE;
-}
-
-impl<T: EncodedSize> EncodedSize for &[T] {
-    fn encoded_size(&self) -> Result<usize, EncodingError> {
-        Ok(self.len().encoded_size()?
-            + self.iter().try_fold(0usize, |acc, x| {
-                acc.checked_add(x.encoded_size()?).ok_or_else(|| {
-                    EncodingError::overflow(&format!(
-                        "Could not calculate encoded size of `&[{}]`, total size overflowed",
-                        std::any::type_name::<T>()
-                    ))
-                })
-            })?)
     }
 }
 
@@ -569,7 +509,7 @@ fn encode_string_array<'a>(
 
 impl CompactEncodable for u16 {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
-        <u16 as EncodedSize>::encoded_size(self)
+        Ok(U16_SIZE)
     }
 
     fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
@@ -728,7 +668,7 @@ impl VecEncodable for u32 {
     where
         Self: Sized,
     {
-        Ok(usize_encoded_size(vec.len()) + (vec.len() * u32::ENCODED_SIZE))
+        Ok(usize_encoded_size(vec.len()) + (vec.len() * 4))
     }
 }
 
@@ -801,10 +741,6 @@ impl<T: BoxArrayEncodable> CompactEncodable for Box<[T]> {
 mod test {
     use super::*;
 
-    fn get_constant_encoded_size<T: ConstantSize>(_x: T) -> usize {
-        T::ENCODED_SIZE
-    }
-
     #[test]
     fn decode_buff_vec() -> Result<(), EncodingError> {
         let buf = &[1, 1];
@@ -833,18 +769,5 @@ mod test {
         check_usize_var_enc_dec!(1 + 8, 4294967296);
 
         Ok(())
-    }
-
-    #[test]
-    fn constant_sized() {
-        let foo: u8 = 42;
-        let bar: u32 = 64;
-        let qux: u64 = 64;
-        let keylike = [2u8; 32];
-        //let x = foo as ConstantSize;
-        assert_eq!(get_constant_encoded_size(foo), 1);
-        assert_eq!(get_constant_encoded_size(bar), 4);
-        assert_eq!(get_constant_encoded_size(qux), 8);
-        assert_eq!(get_constant_encoded_size(keylike), 32);
     }
 }
