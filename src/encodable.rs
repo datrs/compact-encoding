@@ -7,22 +7,6 @@ use crate::{
     EncodingError,
 };
 
-/*
-impl<T: CompactEncodable + std::fmt::Debug> CompactEncoding<T> for State {
-    fn preencode(&mut self, value: &T) -> Result<usize, EncodingError> {
-        self.preencode_t(value)
-    }
-
-    fn encode(&mut self, value: &T, buffer: &mut [u8]) -> Result<usize, EncodingError> {
-        self.encode_t(value, buffer)
-    }
-
-    fn decode(&mut self, buffer: &[u8]) -> Result<T, EncodingError> {
-        self.decode_t(buffer)
-    }
-}
-*/
-
 /// Instead of carrying around [`State`] we just use a buffer.
 /// To track how much buffer is used (like we do with [`State::start`])
 /// we return a slice of the unused portion after encoding.
@@ -55,42 +39,59 @@ pub trait CompactEncodable {
     }
 }
 
-/*
-impl<T: CompactEncodable + std::fmt::Debug> CompactEncodable for Vec<T> {
-    fn encoded_size(&self) -> Result<usize, EncodingError> {
-        let mut size = usize_encoded_size(self.len());
-        for item in self.iter() {
-            size += item.encoded_size()?;
-        }
-        Ok(size)
-    }
+/// Implement this for type `T` to have `CompactEncodable` implemented for `Vec<T>`
+pub trait VecEncodable: CompactEncodable {
+    /// Calculate the resulting size in bytes of `vec`
+    fn vec_encoded_size(vec: &[Self]) -> Result<usize, EncodingError>
+    where
+        Self: Sized;
 
-    fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
-        let mut rest = usize_encoded_bytes(self.len(), buffer)?;
-        for item in self.iter() {
-            rest = item.encoded_bytes(rest)?;
-        }
-        Ok(rest)
-    }
-
-    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
+    /// Encode `vec` to `buffer`
+    fn encoded_bytes<'a>(vec: &[Self], buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError>
     where
         Self: Sized,
     {
-        let (length, mut rest) = usize_decode(buffer).map_err(|_e| todo!())?;
-        if length > 0x100000 {
-            todo!()
-        }
-        let mut out = vec![];
-        for _ in 0..length {
-            let result: (T, &[u8]) = <T as CompactEncodable>::decode(rest)?;
-            rest = result.1;
-            out.push(result.0);
-        }
-        Ok((out, rest))
+        encode_vec(vec, buffer)
+    }
+
+    /// Decode [`Vec<Self>`] from buffer
+    fn decode(buffer: &[u8]) -> Result<(Vec<Self>, &[u8]), EncodingError>
+    where
+        Self: Sized,
+    {
+        decode_vec(buffer)
     }
 }
-*/
+
+// NB: we DO want &Box<..> because we want the trait to work for  boxed things
+#[allow(clippy::borrowed_box)]
+/// Define this trait for `T` to get `Box<[T]>: CompactEncodable`
+pub trait BoxArrayEncodable: CompactEncodable {
+    /// The encoded size in bytes
+    fn boxed_array_encoded_size(boxed: &Box<[Self]>) -> Result<usize, EncodingError>
+    where
+        Self: Sized;
+
+    /// Encode `Box<[T]>` to the buffer and return the remainder of the buffer
+    fn encoded_bytes<'a>(
+        vec: &Box<[Self]>,
+        buffer: &'a mut [u8],
+    ) -> Result<&'a mut [u8], EncodingError>
+    where
+        Self: Sized,
+    {
+        encode_vec(vec, buffer)
+    }
+
+    /// Decode [`Vec<Self>`] from buffer
+    fn decode(buffer: &[u8]) -> Result<(Box<[Self]>, &[u8]), EncodingError>
+    where
+        Self: Sized,
+    {
+        let (result, rest) = decode_vec(buffer)?;
+        Ok((result.into_boxed_slice(), rest))
+    }
+}
 
 impl CompactEncodable for Ipv4Addr {
     fn encoded_size(&self) -> std::result::Result<usize, EncodingError> {
@@ -681,30 +682,6 @@ impl CompactEncodable for Vec<u8> {
     }
 }
 
-/// Implement this for type `T` to have `CompactEncodable` implemented for `Vec<T>`
-pub trait VecEncodable: CompactEncodable {
-    /// Calculate the resulting size in bytes of `vec`
-    fn vec_encoded_size(vec: &[Self]) -> Result<usize, EncodingError>
-    where
-        Self: Sized;
-
-    /// Encode `vec` to `buffer`
-    fn encoded_bytes<'a>(vec: &[Self], buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError>
-    where
-        Self: Sized,
-    {
-        encode_vec(vec, buffer)
-    }
-
-    /// Decode [`Vec<Self>`] from buffer
-    fn decode(buffer: &[u8]) -> Result<(Vec<Self>, &[u8]), EncodingError>
-    where
-        Self: Sized,
-    {
-        decode_vec(buffer)
-    }
-}
-
 fn encode_vec<'a, T: CompactEncodable + Sized>(
     vec: &[T],
     buffer: &'a mut [u8],
@@ -752,36 +729,6 @@ impl VecEncodable for u32 {
         Self: Sized,
     {
         Ok(usize_encoded_size(vec.len()) + (vec.len() * u32::ENCODED_SIZE))
-    }
-}
-
-// NB: we DO want &Box<..> because we want the trait to work for  boxed things
-#[allow(clippy::borrowed_box)]
-/// Define this trait for `T` to get `Box<[T]>: CompactEncodable`
-pub trait BoxArrayEncodable: CompactEncodable {
-    /// The encoded size in bytes
-    fn boxed_array_encoded_size(boxed: &Box<[Self]>) -> Result<usize, EncodingError>
-    where
-        Self: Sized;
-
-    /// Encode `Box<[T]>` to the buffer and return the remainder of the buffer
-    fn encoded_bytes<'a>(
-        vec: &Box<[Self]>,
-        buffer: &'a mut [u8],
-    ) -> Result<&'a mut [u8], EncodingError>
-    where
-        Self: Sized,
-    {
-        encode_vec(vec, buffer)
-    }
-
-    /// Decode [`Vec<Self>`] from buffer
-    fn decode(buffer: &[u8]) -> Result<(Box<[Self]>, &[u8]), EncodingError>
-    where
-        Self: Sized,
-    {
-        let (result, rest) = decode_vec(buffer)?;
-        Ok((result.into_boxed_slice(), rest))
     }
 }
 
