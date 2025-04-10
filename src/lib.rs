@@ -143,6 +143,7 @@
 //! If you export the struct, orphan rule will require you to
 //! implement a wrapper for [State], e.g. `struct MyState(State);` and implement
 //! [CompactEncoding] for the wrapper struct instead.
+pub mod encodable;
 pub mod generic;
 pub mod types;
 pub use types::{CompactEncoding, EncodingError, EncodingErrorKind, State};
