@@ -42,6 +42,27 @@ impl EncodingError {
             message: message.to_string(),
         }
     }
+    /// Helper function for making an overflow error
+    pub fn overflow(message: &str) -> Self {
+        Self {
+            kind: EncodingErrorKind::Overflow,
+            message: message.to_string(),
+        }
+    }
+    /// Helper function for making an out of bounds error
+    pub fn out_of_bounds(message: &str) -> Self {
+        Self {
+            kind: EncodingErrorKind::OutOfBounds,
+            message: message.to_string(),
+        }
+    }
+    /// Helper function for making an invalid data error
+    pub fn invalid_data(message: &str) -> Self {
+        Self {
+            kind: EncodingErrorKind::InvalidData,
+            message: message.to_string(),
+        }
+    }
 }
 
 impl fmt::Display for EncodingError {
