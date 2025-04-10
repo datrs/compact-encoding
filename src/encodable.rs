@@ -43,6 +43,61 @@ pub trait CompactEncodable {
     }
 }
 
+#[macro_export]
+/// Used for defining CompactEncodable::encoded_size.
+/// Pass self and a list of fields to call encoded_size on
+macro_rules! sum_encoded_size {
+    // Base case: single field
+    ($self:ident, $field:ident) => {
+        $self.$field.encoded_size()?
+    };
+    // Recursive case: first field + rest
+    ($self: ident, $first:ident, $($rest:ident),+) => {
+        $self.$first.encoded_size()? + sum_encoded_size!($self, $($rest),+)
+    };
+}
+
+#[macro_export]
+// TODO is this exported from the crate?
+/// Used for defining CompactEncodable::encoded_bytes.
+/// Pass self, the buffer and a list of fields to call encoded_size on
+macro_rules! map_encodables {
+    // Base case: single field
+    ($buffer:expr, $field:ident) => {
+        $field.encoded_bytes($buffer)?
+    };
+    // Recursive case: first field + rest
+    ($buffer:expr, $first:ident, $($rest:ident),+) => {{
+        let rest = $first.encoded_bytes($buffer)?;
+        map_encodables!(rest, $($rest),+)
+    }};
+}
+
+#[macro_export]
+/// Helper for decoding multiple types into a tuple and returning the remaining buffer.
+/// It takes as arguments: `(&buffer, [type1, type2, type3, ...])`
+/// And returns: `((decoded_type1, decoded_type2, ...), remaining_buffer)`
+macro_rules! map_decode {
+    ($buffer:expr, [
+        $($field_type:ty),* $(,)?
+    ]) => {{
+        let mut current_buffer: &[u8] = $buffer;
+
+        // Decode each type into the `result_tuple`
+        let result_tuple = (
+            $(
+                match <$field_type>::decode(&current_buffer)? {
+                    (value, new_buf) => {
+                        current_buffer = new_buf;
+                        value
+                    }
+                },
+            )*
+        );
+        Ok((result_tuple, current_buffer))
+    }};
+}
+
 /// Implement this for type `T` to have `CompactEncodable` implemented for `Vec<T>`
 pub trait VecEncodable: CompactEncodable {
     /// Calculate the resulting size in bytes of `vec`
@@ -97,70 +152,6 @@ pub trait BoxArrayEncodable: CompactEncodable {
     }
 }
 
-impl CompactEncodable for Ipv4Addr {
-    fn encoded_size(&self) -> std::result::Result<usize, EncodingError> {
-        Ok(U32_SIZE)
-    }
-
-    fn encoded_bytes<'a>(
-        &self,
-        buffer: &'a mut [u8],
-    ) -> std::result::Result<&'a mut [u8], EncodingError> {
-        let Some((dest, rest)) = buffer.split_first_chunk_mut::<4>() else {
-            return Err(EncodingError::out_of_bounds(&format!(
-                "Colud not encode {}, not enough room in buffer",
-                std::any::type_name::<Self>()
-            )));
-        };
-        dest.copy_from_slice(&self.octets());
-        Ok(rest)
-    }
-
-    fn decode(buffer: &[u8]) -> std::result::Result<(Self, &[u8]), EncodingError>
-    where
-        Self: Sized,
-    {
-        let Some((dest, rest)) = buffer.split_first_chunk::<4>() else {
-            return Err(EncodingError::out_of_bounds(&format!(
-                "Colud not decode {}, buffer not big enough",
-                std::any::type_name::<Self>()
-            )));
-        };
-        Ok((Ipv4Addr::from(*dest), rest))
-    }
-}
-impl CompactEncodable for Ipv6Addr {
-    fn encoded_size(&self) -> std::result::Result<usize, EncodingError> {
-        Ok(4)
-    }
-
-    fn encoded_bytes<'a>(
-        &self,
-        buffer: &'a mut [u8],
-    ) -> std::result::Result<&'a mut [u8], EncodingError> {
-        let Some((dest, rest)) = buffer.split_first_chunk_mut::<16>() else {
-            return Err(EncodingError::out_of_bounds(&format!(
-                "Colud not encode {}, not enough room in buffer",
-                std::any::type_name::<Self>()
-            )));
-        };
-        dest.copy_from_slice(&self.octets());
-        Ok(rest)
-    }
-
-    fn decode(buffer: &[u8]) -> std::result::Result<(Self, &[u8]), EncodingError>
-    where
-        Self: Sized,
-    {
-        let Some((dest, rest)) = buffer.split_first_chunk::<16>() else {
-            return Err(EncodingError::out_of_bounds(&format!(
-                "Colud not decode {}, buffer not big enough",
-                std::any::type_name::<Self>()
-            )));
-        };
-        Ok((Ipv6Addr::from(*dest), rest))
-    }
-}
 /// helper for mapping the first element of a two eleent tuple
 macro_rules! map_first {
     ($res:expr, $f:expr) => {{
@@ -211,6 +202,32 @@ pub fn u64_encoded_bytes(uint: u64, buffer: &mut [u8]) -> Result<&mut [u8], Enco
         let rest = write_array(&[U64_SIGNIFIER], buffer)?;
         encode_u64(uint, rest)
     }
+}
+
+/// Sum encoded sizes
+pub fn encoded_size(arr: &[impl CompactEncodable]) -> Result<usize, EncodingError> {
+    let mut out = 0;
+    for x in arr {
+        out += x.encoded_size()?;
+    }
+    Ok(out)
+}
+
+/// Create a buffer from an array of CompactEncodable objects
+pub fn create_buffer(arr: &[impl CompactEncodable]) -> Result<Vec<u8>, EncodingError> {
+    Ok(vec![0; encoded_size(arr)?])
+}
+
+/// Encode an array of CompactEncodable objects
+pub fn map_encode<'a>(
+    arr: &[impl CompactEncodable],
+    buffer: &'a mut [u8],
+) -> Result<&'a mut [u8], EncodingError> {
+    let mut rest = buffer;
+    for x in arr {
+        rest = x.encoded_bytes(rest)?;
+    }
+    Ok(rest)
 }
 
 /// Write `uint` to the start of `buffer` and return the remaining part of `buffer`.
@@ -367,40 +384,21 @@ impl<const N: usize> CompactEncodable for [u8; N] {
     }
 }
 
-fn decode_u16(buffer: &[u8]) -> Result<(u16, &[u8]), EncodingError> {
-    let (data, rest) = take_array::<2>(buffer)?;
-    Ok(((data[0] as u16) | ((data[1] as u16) << 8), rest))
-}
-
-fn decode_u32(buffer: &[u8]) -> Result<(u32, &[u8]), EncodingError> {
-    let (data, rest) = take_array::<4>(buffer)?;
-    Ok((
-        ((data[0] as u32)
-            | ((data[1] as u32) << 8)
-            | ((data[2] as u32) << 16)
-            | ((data[3] as u32) << 24)),
-        rest,
-    ))
-}
-
-fn decode_u64(buffer: &[u8]) -> Result<(u64, &[u8]), EncodingError> {
-    let (data, rest) = take_array::<8>(buffer)?;
-    Ok((
-        ((data[0] as u64)
-            | ((data[1] as u64) << 8)
-            | ((data[2] as u64) << 16)
-            | ((data[3] as u64) << 24)
-            | ((data[4] as u64) << 32)
-            | ((data[5] as u64) << 40)
-            | ((data[6] as u64) << 48)
-            | ((data[7] as u64) << 56)),
-        rest,
-    ))
-}
-
 fn decode_u8(buffer: &[u8]) -> Result<(u8, &[u8]), EncodingError> {
     let (data, rest) = take_array::<1>(buffer)?;
-    Ok((data[0], rest))
+    Ok((u8::from_le_bytes(data), rest))
+}
+fn decode_u16(buffer: &[u8]) -> Result<(u16, &[u8]), EncodingError> {
+    let (data, rest) = take_array::<2>(buffer)?;
+    Ok((u16::from_le_bytes(data), rest))
+}
+fn decode_u32(buffer: &[u8]) -> Result<(u32, &[u8]), EncodingError> {
+    let (data, rest) = take_array::<4>(buffer)?;
+    Ok((u32::from_le_bytes(data), rest))
+}
+fn decode_u64(buffer: &[u8]) -> Result<(u64, &[u8]), EncodingError> {
+    let (data, rest) = take_array::<8>(buffer)?;
+    Ok((u64::from_le_bytes(data), rest))
 }
 
 fn decode_u32_var(buffer: &[u8]) -> Result<(u32, &[u8]), EncodingError> {
@@ -523,6 +521,24 @@ fn encode_string_array<'a>(
     Ok(rest)
 }
 
+impl CompactEncodable for u8 {
+    fn encoded_size(&self) -> Result<usize, EncodingError> {
+        Ok(1)
+    }
+
+    fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+        write_array(&[*self], buffer)
+    }
+
+    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
+    where
+        Self: Sized,
+    {
+        let ([out], rest) = take_array::<1>(buffer)?;
+        Ok((out, rest))
+    }
+}
+
 impl CompactEncodable for u16 {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
         Ok(U16_SIZE)
@@ -539,6 +555,8 @@ impl CompactEncodable for u16 {
         decode_u16(buffer)
     }
 }
+
+// NB: we want u32 encoded and decoded as variable sized uint
 impl CompactEncodable for u32 {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
         Ok(usize_encoded_size(*self as usize))
@@ -638,6 +656,71 @@ impl CompactEncodable for Vec<u8> {
     }
 }
 
+impl CompactEncodable for Ipv4Addr {
+    fn encoded_size(&self) -> std::result::Result<usize, EncodingError> {
+        Ok(U32_SIZE)
+    }
+
+    fn encoded_bytes<'a>(
+        &self,
+        buffer: &'a mut [u8],
+    ) -> std::result::Result<&'a mut [u8], EncodingError> {
+        let Some((dest, rest)) = buffer.split_first_chunk_mut::<4>() else {
+            return Err(EncodingError::out_of_bounds(&format!(
+                "Colud not encode {}, not enough room in buffer",
+                std::any::type_name::<Self>()
+            )));
+        };
+        dest.copy_from_slice(&self.octets());
+        Ok(rest)
+    }
+
+    fn decode(buffer: &[u8]) -> std::result::Result<(Self, &[u8]), EncodingError>
+    where
+        Self: Sized,
+    {
+        let Some((dest, rest)) = buffer.split_first_chunk::<4>() else {
+            return Err(EncodingError::out_of_bounds(&format!(
+                "Colud not decode {}, buffer not big enough",
+                std::any::type_name::<Self>()
+            )));
+        };
+        Ok((Ipv4Addr::from(*dest), rest))
+    }
+}
+impl CompactEncodable for Ipv6Addr {
+    fn encoded_size(&self) -> std::result::Result<usize, EncodingError> {
+        Ok(4)
+    }
+
+    fn encoded_bytes<'a>(
+        &self,
+        buffer: &'a mut [u8],
+    ) -> std::result::Result<&'a mut [u8], EncodingError> {
+        let Some((dest, rest)) = buffer.split_first_chunk_mut::<16>() else {
+            return Err(EncodingError::out_of_bounds(&format!(
+                "Colud not encode {}, not enough room in buffer",
+                std::any::type_name::<Self>()
+            )));
+        };
+        dest.copy_from_slice(&self.octets());
+        Ok(rest)
+    }
+
+    fn decode(buffer: &[u8]) -> std::result::Result<(Self, &[u8]), EncodingError>
+    where
+        Self: Sized,
+    {
+        let Some((dest, rest)) = buffer.split_first_chunk::<16>() else {
+            return Err(EncodingError::out_of_bounds(&format!(
+                "Colud not decode {}, buffer not big enough",
+                std::any::type_name::<Self>()
+            )));
+        };
+        Ok((Ipv6Addr::from(*dest), rest))
+    }
+}
+
 fn encode_vec<'a, T: CompactEncodable + Sized>(
     vec: &[T],
     buffer: &'a mut [u8],
@@ -688,21 +771,12 @@ impl VecEncodable for u32 {
     }
 }
 
-impl CompactEncodable for u8 {
-    fn encoded_size(&self) -> Result<usize, EncodingError> {
-        Ok(1)
-    }
-
-    fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
-        write_array(&[*self], buffer)
-    }
-
-    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
+impl<const N: usize> VecEncodable for [u8; N] {
+    fn vec_encoded_size(vec: &[Self]) -> Result<usize, EncodingError>
     where
         Self: Sized,
     {
-        let ([out], rest) = take_array::<1>(buffer)?;
-        Ok((out, rest))
+        Ok(usize_encoded_size(vec.len()) + (vec.len() * N))
     }
 }
 
