@@ -46,19 +46,33 @@ pub trait CompactEncodable {
 #[macro_export]
 /// Used for defining CompactEncodable::encoded_size.
 /// Pass self and a list of fields to call encoded_size on
-macro_rules! sum_encoded_size {
-    // Base case: single field
-    ($self:ident, $field:ident) => {
-        $self.$field.encoded_size()?
-    };
-    // Recursive case: first field + rest
-    ($self: ident, $first:ident, $($rest:ident),+) => {
-        $self.$first.encoded_size()? + sum_encoded_size!($self, $($rest),+)
-    };
+macro_rules! sum_preencode {
+    ($($val:expr),+) => {{
+        let out: usize = [
+                $(
+                    $val.encoded_size()?,
+
+                )*
+            ].iter().sum();
+        out
+    }}
 }
 
 #[macro_export]
-// TODO is this exported from the crate?
+/// Create a buffer from a list of CompactEncodable things to be used for encoding
+macro_rules! create_buffer {
+    ($($val:expr),+) => {{
+        let len: usize = [
+                $(
+                    $val.encoded_size()?,
+
+                )*
+            ].iter().sum();
+        vec![0; len]
+    }}
+}
+
+#[macro_export]
 /// Used for defining CompactEncodable::encoded_bytes.
 /// Pass self, the buffer and a list of fields to call encoded_size on
 macro_rules! map_encodables {
