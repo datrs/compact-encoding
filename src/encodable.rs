@@ -16,16 +16,16 @@ const U32_SIZE: usize = 4;
 /// Instead of carrying around [`State`] we just use a buffer.
 /// To track how much buffer is used (like we do with [`State::start`])
 /// we return a slice of the unused portion after encoding.
-pub trait CompactEncodable {
+pub trait CompactEncodable<Decode: ?Sized = Self> {
     /// The size required in the buffer for this time
     fn encoded_size(&self) -> Result<usize, EncodingError>;
     /// The bytes resulting from encoding this type
     // TODO add buffer argument. Change result to return remaining buffer
     fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError>;
     /// Decode a value from the buffer. Returns the value  and remaining undecoded bytes
-    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
+    fn decode(buffer: &[u8]) -> Result<(Decode, &[u8]), EncodingError>
     where
-        Self: Sized;
+        Decode: Sized;
 
     /// Encode `self` into a `Vec<u8>`. This is just a helper method for:
     /// ```
@@ -617,6 +617,20 @@ impl CompactEncodable for String {
     where
         Self: Sized,
     {
+        decode_string(buffer)
+    }
+}
+
+impl CompactEncodable<String> for str {
+    fn encoded_size(&self) -> Result<usize, EncodingError> {
+        encoded_size_str(self)
+    }
+
+    fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+        encode_str(self, buffer)
+    }
+
+    fn decode(buffer: &[u8]) -> Result<(String, &[u8]), EncodingError> {
         decode_string(buffer)
     }
 }
