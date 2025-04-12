@@ -584,7 +584,7 @@ impl CompactEncodable for u32 {
     where
         Self: Sized,
     {
-        decode_u32(buffer)
+        decode_u32_var(buffer)
     }
 }
 impl CompactEncodable for u64 {
@@ -600,7 +600,7 @@ impl CompactEncodable for u64 {
     where
         Self: Sized,
     {
-        decode_u64(buffer)
+        decode_u64_var(buffer)
     }
 }
 

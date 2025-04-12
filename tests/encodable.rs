@@ -34,32 +34,29 @@ fn cenc_32_byte_array() -> Result<(), EncodingError> {
 
 #[test]
 fn cenc_basic() -> Result<(), EncodingError> {
-    let _str_value_1 = "foo";
+    let str_value_1 = "foo";
     let str_value_2 = (0..MAX_ONE_BYTE_UINT).map(|_| "X").collect::<String>();
     let u32_value_3: u32 = u32::MAX;
     let u32_value_4: u32 = 0xF0E1D2C3;
 
-    let mut _buff = create_buffer!(str_value_2, u32_value_3, u32_value_4);
-    assert_eq!(_buff.len(), 1 + 252 + 1 + 4 + 1 + 4);
+    let mut buff = create_buffer!(str_value_1, str_value_2, u32_value_3, u32_value_4);
+    assert_eq!(buff.len(), 1 + 3 + 1 + 252 + 1 + 4 + 1 + 4);
 
-    //let rest = map_encodables!(buf, str_value_1, str_value_2, u32_value_3, u32_value_4);
-    /*
-    // Strings: 1 byte for length, 3/252 bytes for content
-    // u32: 1 byte for u32 signifier, 4 bytes for data
-    assert_eq!(buffer.len(), 1 + 3 + 1 + 252 + 1 + 4 + 1 + 4);
-    enc_state.encode_str(str_value_1, &mut buffer)?;
-    enc_state.encode(&str_value_2, &mut buffer)?;
-    enc_state.encode(&u32_value_3, &mut buffer)?;
-    enc_state.encode(&u32_value_4, &mut buffer)?;
-    let mut dec_state = State::from_buffer(&buffer);
-    let str_value_1_ret: String = dec_state.decode(&buffer)?;
-    assert_eq!(str_value_1, str_value_1_ret);
-    let str_value_2_ret: String = dec_state.decode(&buffer)?;
-    assert_eq!(str_value_2, str_value_2_ret);
-    let u32_value_3_ret: u32 = dec_state.decode(&buffer)?;
-    assert_eq!(u32_value_3, u32_value_3_ret);
-    let u32_value_4_ret: u32 = dec_state.decode(&buffer)?;
-    assert_eq!(u32_value_4, u32_value_4_ret);
-    */
+    let rest = map_encodables!(
+        &mut buff,
+        str_value_1,
+        str_value_2,
+        u32_value_3,
+        u32_value_4
+    );
+    assert!(rest.is_empty());
+    let (result, remaning_buff) = map_decode!(&buff, [String, String, u32, u32])?;
+    dbg!(remaning_buff);
+    assert!(remaning_buff.is_empty());
+
+    assert_eq!(result.0, str_value_1);
+    assert_eq!(result.1, str_value_2);
+    assert_eq!(result.2, u32_value_3);
+    assert_eq!(result.3, u32_value_4);
     Ok(())
 }
