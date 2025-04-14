@@ -25,7 +25,8 @@ pub trait CompactEncodable<Decode: ?Sized = Self> {
     where
         Decode: Sized;
 
-    /// Encode `self` into a `Vec<u8>`. This is just a helper method for:
+    /// Encode `self` into a `Vec<u8>`. This is just a helper method for creating a buffer and
+    /// encoding to it in one step.
     /// ```
     /// # use std::net::Ipv4Addr;
     /// # use compact_encoding::encodable::CompactEncodable;
@@ -38,6 +39,18 @@ pub trait CompactEncodable<Decode: ?Sized = Self> {
         let mut buff = vec![0; self.encoded_size()?];
         self.encoded_bytes(&mut buff)?;
         Ok(buff)
+    }
+    /// Create an empty buffer of the correct size for encoding `self` to. This is just a helper
+    /// method for: encoding to it in one step.
+    /// ```
+    /// # use std::net::Ipv4Addr;
+    /// # use compact_encoding::encodable::CompactEncodable;
+    /// let foo: Ipv4Addr = "0.0.0.0".parse()?;
+    /// vec![0; foo.encoded_size()?];
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    fn create_buffer(&self) -> Result<Vec<u8>, EncodingError> {
+        Ok(vec![0; self.encoded_size()?])
     }
 }
 
