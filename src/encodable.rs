@@ -1,4 +1,3 @@
-#![allow(unused)]
 //! CompactEncodable stuff
 use std::{
     any::type_name,
@@ -356,7 +355,7 @@ pub fn take_array_mut<const N: usize>(
 /// write `source` to `buffer` and return remaining buffer
 pub fn write_slice<'a>(source: &[u8], buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
     let mid = source.len();
-    let (mut dest, rest) = get_slices_mut_checked(buffer, mid)?;
+    let (dest, rest) = get_slices_mut_checked(buffer, mid)?;
     dest.copy_from_slice(source);
     Ok(rest)
 }
@@ -369,7 +368,7 @@ fn encoded_size_str(value: &str) -> Result<usize, EncodingError> {
 pub fn bytes_fixed_from_vec<const N: usize>(value: &[u8]) -> Result<[u8; N], EncodingError> {
     <[u8; N]>::try_from(value).map_err(|e| {
         EncodingError::invalid_data(&format!(
-            "Could not covert vec with length [{}] to array of length [{}]",
+            "Could not covert slice with length [{}] to array of length [{}]. Error: [{e}]",
             value.len(),
             N
         ))
@@ -409,10 +408,6 @@ impl<const N: usize> CompactEncodable for [u8; N] {
     }
 }
 
-fn decode_u8(buffer: &[u8]) -> Result<(u8, &[u8]), EncodingError> {
-    let (data, rest) = take_array::<1>(buffer)?;
-    Ok((u8::from_le_bytes(data), rest))
-}
 fn decode_u16(buffer: &[u8]) -> Result<(u16, &[u8]), EncodingError> {
     let (data, rest) = take_array::<2>(buffer)?;
     Ok((u16::from_le_bytes(data), rest))
@@ -480,17 +475,6 @@ fn decode_string(buffer: &[u8]) -> Result<(String, &[u8]), EncodingError> {
     Ok((out, rest))
 }
 
-fn decode_string_array(buffer: &[u8]) -> Result<(Vec<String>, &[u8]), EncodingError> {
-    let (len, mut rest) = decode_usize_var(buffer)?;
-    let mut out = Vec::with_capacity(len);
-    for _ in 0..len {
-        let next = decode_string(rest)?;
-        out.push(next.0);
-        rest = next.1;
-    }
-    Ok((out, rest))
-}
-
 fn encode_u8(val: u8, buffer: &mut [u8]) -> Result<&mut [u8], EncodingError> {
     write_array(&val.to_le_bytes(), buffer)
 }
@@ -514,12 +498,16 @@ fn encode_usize_var<'a>(
         encode_u16(*value as u16, write_array(&[U16_SIGNIFIER], buffer)?)
     } else if *value <= 0xffffffff {
         let value = u32::try_from(*value).map_err(|e| {
-            EncodingError::overflow(&format!("count not covert usize [{value}] to u32"))
+            EncodingError::overflow(&format!(
+                "count not covert usize [{value}] to u32. Error: [{e}]"
+            ))
         })?;
         encode_u32(value, write_array(&[U32_SIGNIFIER], buffer)?)
     } else {
         let value = u64::try_from(*value).map_err(|e| {
-            EncodingError::overflow(&format!("count not covert usize [{value}] to u64"))
+            EncodingError::overflow(&format!(
+                "count not covert usize [{value}] to u64. Error: [{e}]"
+            ))
         })?;
         encode_u64(value, write_array(&[U64_SIGNIFIER], buffer)?)
     }
@@ -533,17 +521,6 @@ fn encode_str<'a>(value: &str, buffer: &'a mut [u8]) -> Result<&'a mut [u8], Enc
 fn encode_buffer<'a>(value: &[u8], buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
     let rest = encode_usize_var(&value.len(), buffer)?;
     write_slice(value, rest)
-}
-
-fn encode_string_array<'a>(
-    value: &[String],
-    buffer: &'a mut [u8],
-) -> Result<&'a mut [u8], EncodingError> {
-    let mut rest = encode_usize_var(&value.len(), buffer)?;
-    for s in value {
-        rest = encode_str(s, rest)?;
-    }
-    Ok(rest)
 }
 
 impl CompactEncodable for u8 {
@@ -707,7 +684,7 @@ impl CompactEncodable for Ipv4Addr {
         let Some((dest, rest)) = buffer.split_first_chunk_mut::<4>() else {
             return Err(EncodingError::out_of_bounds(&format!(
                 "Colud not encode {}, not enough room in buffer",
-                std::any::type_name::<Self>()
+                type_name::<Self>()
             )));
         };
         dest.copy_from_slice(&self.octets());
@@ -721,7 +698,7 @@ impl CompactEncodable for Ipv4Addr {
         let Some((dest, rest)) = buffer.split_first_chunk::<4>() else {
             return Err(EncodingError::out_of_bounds(&format!(
                 "Colud not decode {}, buffer not big enough",
-                std::any::type_name::<Self>()
+                type_name::<Self>()
             )));
         };
         Ok((Ipv4Addr::from(*dest), rest))
@@ -739,7 +716,7 @@ impl CompactEncodable for Ipv6Addr {
         let Some((dest, rest)) = buffer.split_first_chunk_mut::<16>() else {
             return Err(EncodingError::out_of_bounds(&format!(
                 "Colud not encode {}, not enough room in buffer",
-                std::any::type_name::<Self>()
+                type_name::<Self>()
             )));
         };
         dest.copy_from_slice(&self.octets());
@@ -753,7 +730,7 @@ impl CompactEncodable for Ipv6Addr {
         let Some((dest, rest)) = buffer.split_first_chunk::<16>() else {
             return Err(EncodingError::out_of_bounds(&format!(
                 "Colud not decode {}, buffer not big enough",
-                std::any::type_name::<Self>()
+                type_name::<Self>()
             )));
         };
         Ok((Ipv6Addr::from(*dest), rest))
@@ -776,7 +753,7 @@ fn decode_vec<T: CompactEncodable + Sized>(
 ) -> Result<(Vec<T>, &[u8]), EncodingError> {
     let (len, mut rest) = decode_usize_var(buffer)?;
     let mut out = Vec::with_capacity(len);
-    for i in 0..len {
+    for _ in 0..len {
         let res = <T as CompactEncodable>::decode(rest)?;
         out.push(res.0);
         rest = res.1;
