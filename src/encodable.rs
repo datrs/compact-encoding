@@ -12,14 +12,13 @@ use crate::{
 const U16_SIZE: usize = 2;
 const U32_SIZE: usize = 4;
 
-/// Implement for types to get encoding and decoding.
+/// Implement for a type to get encoding and decoding.
 pub trait CompactEncodable<Decode: ?Sized = Self> {
-    /// The size required in the buffer for this time
+    /// The size in bytes required to encode `self`.
     fn encoded_size(&self) -> Result<usize, EncodingError>;
-    /// The bytes resulting from encoding this type
-    // TODO add buffer argument. Change result to return remaining buffer
+    /// Encode `self` into `buffer` returning the remainder of `buffer`.
     fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError>;
-    /// Decode a value from the buffer. Returns the value  and remaining undecoded bytes
+    /// Decode a value of type [`Decode`] from `buffer`. Returns the decoded value and remaining undecoded bytes.
     fn decode(buffer: &[u8]) -> Result<(Decode, &[u8]), EncodingError>
     where
         Decode: Sized;
