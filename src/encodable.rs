@@ -60,7 +60,7 @@ pub trait VecEncodable: CompactEncodable {
         Self: Sized;
 
     /// Encode `vec` to `buffer`
-    fn encoded_bytes<'a>(vec: &[Self], buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError>
+    fn vec_encode<'a>(vec: &[Self], buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError>
     where
         Self: Sized,
     {
@@ -68,7 +68,7 @@ pub trait VecEncodable: CompactEncodable {
     }
 
     /// Decode [`Vec<Self>`] from buffer
-    fn decode(buffer: &[u8]) -> Result<(Vec<Self>, &[u8]), EncodingError>
+    fn vec_decode(buffer: &[u8]) -> Result<(Vec<Self>, &[u8]), EncodingError>
     where
         Self: Sized,
     {
@@ -85,8 +85,8 @@ pub trait BoxArrayEncodable: CompactEncodable {
     where
         Self: Sized;
 
-    /// Encode `Box<[T]>` to the buffer and return the remainder of the buffer
-    fn encoded_bytes<'a>(
+    /// Encode `Box<[Self]>` to the buffer and return the remainder of the buffer
+    fn box_encode<'a>(
         vec: &Box<[Self]>,
         buffer: &'a mut [u8],
     ) -> Result<&'a mut [u8], EncodingError>
@@ -96,8 +96,8 @@ pub trait BoxArrayEncodable: CompactEncodable {
         encode_vec(vec, buffer)
     }
 
-    /// Decode [`Vec<Self>`] from buffer
-    fn decode(buffer: &[u8]) -> Result<(Box<[Self]>, &[u8]), EncodingError>
+    /// Decode [`Box<[Self]>`] from buffer
+    fn box_decode(buffer: &[u8]) -> Result<(Box<[Self]>, &[u8]), EncodingError>
     where
         Self: Sized,
     {
@@ -829,14 +829,14 @@ impl<T: VecEncodable> CompactEncodable for Vec<T> {
     }
 
     fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
-        <T as VecEncodable>::encoded_bytes(self, buffer)
+        <T as VecEncodable>::vec_encode(self, buffer)
     }
 
     fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
     where
         Self: Sized,
     {
-        <T as VecEncodable>::decode(buffer)
+        <T as VecEncodable>::vec_decode(buffer)
     }
 }
 
@@ -848,7 +848,7 @@ impl VecEncodable for u32 {
         Ok(usize_encoded_size(vec.len()) + (vec.len() * 4))
     }
     /// Encode `vec` to `buffer`
-    fn encoded_bytes<'a>(vec: &[Self], buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError>
+    fn vec_encode<'a>(vec: &[Self], buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError>
     where
         Self: Sized,
     {
@@ -860,7 +860,7 @@ impl VecEncodable for u32 {
     }
 
     /// Decode [`Vec<Self>`] from buffer
-    fn decode(buffer: &[u8]) -> Result<(Vec<Self>, &[u8]), EncodingError>
+    fn vec_decode(buffer: &[u8]) -> Result<(Vec<Self>, &[u8]), EncodingError>
     where
         Self: Sized,
     {
@@ -893,7 +893,7 @@ impl BoxArrayEncodable for u8 {
         Ok(usize_encoded_size(boxed.len()) + boxed.len())
     }
 
-    fn encoded_bytes<'a>(
+    fn box_encode<'a>(
         boxed: &Box<[Self]>,
         buffer: &'a mut [u8],
     ) -> Result<&'a mut [u8], EncodingError>
@@ -904,7 +904,7 @@ impl BoxArrayEncodable for u8 {
         write_slice(boxed, rest)
     }
 
-    fn decode(buffer: &[u8]) -> Result<(Box<[Self]>, &[u8]), EncodingError>
+    fn box_decode(buffer: &[u8]) -> Result<(Box<[Self]>, &[u8]), EncodingError>
     where
         Self: Sized,
     {
@@ -920,14 +920,14 @@ impl<T: BoxArrayEncodable> CompactEncodable for Box<[T]> {
     }
 
     fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
-        <T as BoxArrayEncodable>::encoded_bytes(self, buffer)
+        <T as BoxArrayEncodable>::box_encode(self, buffer)
     }
 
     fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
     where
         Self: Sized,
     {
-        <T as BoxArrayEncodable>::decode(buffer)
+        <T as BoxArrayEncodable>::box_decode(buffer)
     }
 }
 
