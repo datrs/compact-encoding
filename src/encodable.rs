@@ -53,75 +53,6 @@ pub trait CompactEncodable<Decode: ?Sized = Self> {
     }
 }
 
-#[macro_export]
-/// Used for defining CompactEncodable::encoded_size.
-/// Pass self and a list of fields to call encoded_size on
-macro_rules! sum_preencode {
-    ($($val:expr),+) => {{
-        let out: usize = [
-                $(
-                    $val.encoded_size()?,
-
-                )*
-            ].iter().sum();
-        out
-    }}
-}
-
-#[macro_export]
-/// Create a buffer from a list of CompactEncodable things to be used for encoding
-macro_rules! create_buffer {
-    ($($val:expr),+) => {{
-        let len: usize = [
-                $(
-                    $val.encoded_size()?,
-
-                )*
-            ].iter().sum();
-        vec![0; len]
-    }}
-}
-
-#[macro_export]
-/// Used for defining CompactEncodable::encoded_bytes.
-/// Pass self, the buffer and a list of fields to call encoded_size on
-macro_rules! map_encodables {
-    // Base case: single field
-    ($buffer:expr, $field:ident) => {
-        $field.encoded_bytes($buffer)?
-    };
-    // Recursive case: first field + rest
-    ($buffer:expr, $first:ident, $($rest:ident),+) => {{
-        let rest = $first.encoded_bytes($buffer)?;
-        map_encodables!(rest, $($rest),+)
-    }};
-}
-
-#[macro_export]
-/// Helper for decoding multiple types into a tuple and returning the remaining buffer.
-/// It takes as arguments: `(&buffer, [type1, type2, type3, ...])`
-/// And returns: `((decoded_type1, decoded_type2, ...), remaining_buffer)`
-macro_rules! map_decode {
-    ($buffer:expr, [
-        $($field_type:ty),* $(,)?
-    ]) => {{
-        let mut current_buffer: &[u8] = $buffer;
-
-        // Decode each type into the `result_tuple`
-        let result_tuple = (
-            $(
-                match <$field_type>::decode(&current_buffer)? {
-                    (value, new_buf) => {
-                        current_buffer = new_buf;
-                        value
-                    }
-                },
-            )*
-        );
-        (result_tuple, current_buffer)
-    }};
-}
-
 /// Implement this for type `T` to have `CompactEncodable` implemented for `Vec<T>`
 pub trait VecEncodable: CompactEncodable {
     /// Calculate the resulting size in bytes of `vec`
@@ -174,6 +105,138 @@ pub trait BoxArrayEncodable: CompactEncodable {
         let (result, rest) = decode_vec(buffer)?;
         Ok((result.into_boxed_slice(), rest))
     }
+}
+
+#[macro_export]
+/// Given a list of [`CompactEncodable`] things, sum the result of calling
+/// [`CompactEncodable::encoded_size`] on all of them.
+/// Note this is macro is useful when your arguments have differing types.
+/// ```
+/// # use crate::compact_encoding::{sum_preencode, encodable::CompactEncodable};
+/// # use std::net::Ipv4Addr;
+/// let foo: Ipv4Addr = "0.0.0.0".parse()?;
+/// let bar = 42u64;
+/// let qux = "hello?";
+/// let result = sum_preencode!(foo, bar, qux);
+/// assert_eq!(result, 12);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+macro_rules! sum_preencode {
+    ($($val:expr),+) => {{
+        let out: usize = [
+                $(
+                    $val.encoded_size()?,
+
+                )*
+            ].iter().sum();
+        out
+    }}
+}
+
+#[macro_export]
+/// Given a list of [`CompactEncodable`] things, create a zeroed buffer of the correct size for encoding.
+/// Note this is macro is useful when your arguments have differing types.
+/// ```
+/// # use crate::compact_encoding::{create_buffer, encodable::CompactEncodable};
+/// # use std::net::Ipv4Addr;
+/// let foo: Ipv4Addr = "0.0.0.0".parse()?;
+/// let bar = 42u64;
+/// let qux = "hello?";
+/// let buff = create_buffer!(foo, bar, qux);
+/// assert_eq!(buff.len(), 12);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+macro_rules! create_buffer {
+    ($($val:expr),+) => {{
+        let len: usize = [
+                $(
+                    $val.encoded_size()?,
+
+                )*
+            ].iter().sum();
+        vec![0; len]
+    }}
+}
+
+#[macro_export]
+/// Given a buffer and a list of [`CompactEncodable`] things, encode the arguments to the buffer.
+/// Note this is macro is useful when your arguments have differing types.
+/// ```
+/// # use crate::compact_encoding::{create_buffer, map_encodables, encodable::CompactEncodable};
+/// let num = 42u64;
+/// let word = "yo";
+/// let mut buff = create_buffer!(num, word);
+/// let result = map_encodables!(&mut buff, num, word);
+/// assert!(result.is_empty());
+/// assert_eq!(&buff, &[42, 2, 121, 111]);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+macro_rules! map_encodables {
+    ($buffer:expr$(,)*) => {
+        $buffer
+    };
+    // Base case: single field
+    ($buffer:expr, $field:expr) => {
+        $field.encoded_bytes($buffer)?
+    };
+    // Recursive case: first field + rest
+    ($buffer:expr, $first:expr, $($rest:expr),+) => {{
+        let rest = $first.encoded_bytes($buffer)?;
+        map_encodables!(rest, $($rest),+)
+    }};
+}
+
+#[macro_export]
+/// Given a list of [`CompactEncodable`] things, encode the arguments to the buffer.
+/// Note this is macro is useful when your arguments have differing types.
+/// ```
+/// # use crate::compact_encoding::to_encoded_bytes;
+/// let result = to_encoded_bytes!(42u64, "yo");
+/// assert_eq!(&result, &[42, 2, 121, 111]);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+macro_rules! to_encoded_bytes {
+    ($($val:expr),*) => {{
+        use $crate::{map_encodables, create_buffer, encodable::CompactEncodable};
+        let mut buffer = create_buffer!($($val),*);
+        map_encodables!(&mut buffer, $($val),*);
+        buffer
+    }}
+}
+
+#[macro_export]
+/// Decode a buffer to the list of types provided, returning the remaining buffer.
+/// It takes as arguments: `(&buffer, [type1, type2, type3, ...])`
+/// And returns: `((decoded_type1, decoded_type2, ...), remaining_buffer)`
+/// ```
+/// # use crate::compact_encoding::{to_encoded_bytes, map_decode};
+/// let buffer = to_encoded_bytes!(42u64, "yo");
+/// let ((number, word), remaining_buffer) = map_decode!(&buffer, [u64, String]);
+/// assert!(remaining_buffer.is_empty());
+/// assert_eq!(number, 42u64);
+/// assert_eq!(word, "yo");
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+macro_rules! map_decode {
+    ($buffer:expr, [
+        $($field_type:ty),* $(,)?
+    ]) => {{
+        use $crate::encodable::CompactEncodable;
+        let mut current_buffer: &[u8] = $buffer;
+
+        // Decode each type into `result_tuple`
+        let result_tuple = (
+            $(
+                match <$field_type>::decode(&current_buffer)? {
+                    (value, new_buf) => {
+                        current_buffer = new_buf;
+                        value
+                    }
+                },
+            )*
+        );
+        (result_tuple, current_buffer)
+    }};
 }
 
 /// helper for mapping the first element of a two eleent tuple
