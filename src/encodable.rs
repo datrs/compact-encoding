@@ -13,9 +13,7 @@ use crate::{
 const U16_SIZE: usize = 2;
 const U32_SIZE: usize = 4;
 
-/// Instead of carrying around [`State`] we just use a buffer.
-/// To track how much buffer is used (like we do with [`State::start`])
-/// we return a slice of the unused portion after encoding.
+/// Implement for types to get encoding and decoding.
 pub trait CompactEncodable<Decode: ?Sized = Self> {
     /// The size required in the buffer for this time
     fn encoded_size(&self) -> Result<usize, EncodingError>;
@@ -108,7 +106,7 @@ macro_rules! map_decode {
                 },
             )*
         );
-        Ok((result_tuple, current_buffer))
+        (result_tuple, current_buffer)
     }};
 }
 
@@ -796,6 +794,33 @@ impl VecEncodable for u32 {
         Self: Sized,
     {
         Ok(usize_encoded_size(vec.len()) + (vec.len() * 4))
+    }
+    /// Encode `vec` to `buffer`
+    fn encoded_bytes<'a>(vec: &[Self], buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError>
+    where
+        Self: Sized,
+    {
+        let mut rest = encode_usize_var(&vec.len(), buffer)?;
+        for x in vec {
+            rest = encode_u32(*x, rest)?;
+        }
+        Ok(rest)
+    }
+
+    /// Decode [`Vec<Self>`] from buffer
+    fn decode(buffer: &[u8]) -> Result<(Vec<Self>, &[u8]), EncodingError>
+    where
+        Self: Sized,
+    {
+        let (len, mut rest) = decode_usize_var(buffer)?;
+        let mut out = Vec::with_capacity(len);
+
+        for _ in 0..len {
+            let result = decode_u32(rest)?;
+            out.push(result.0);
+            rest = result.1;
+        }
+        Ok((out, rest))
     }
 }
 
