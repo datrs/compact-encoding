@@ -818,7 +818,7 @@ impl State {
         buffer: &mut [u8],
     ) -> Result<usize, EncodingError> {
         let start_len = buffer.len();
-        let rest = value.encoded_bytes(buffer)?;
+        let rest = value.encode(buffer)?;
         let offset = start_len - rest.len();
         self.add_start(offset)
     }

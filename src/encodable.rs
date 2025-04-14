@@ -17,7 +17,7 @@ pub trait CompactEncodable<Decode: ?Sized = Self> {
     /// The size in bytes required to encode `self`.
     fn encoded_size(&self) -> Result<usize, EncodingError>;
     /// Encode `self` into `buffer` returning the remainder of `buffer`.
-    fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError>;
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError>;
     /// Decode a value of type [`Decode`] from `buffer`. Returns the decoded value and remaining undecoded bytes.
     fn decode(buffer: &[u8]) -> Result<(Decode, &[u8]), EncodingError>
     where
@@ -30,12 +30,12 @@ pub trait CompactEncodable<Decode: ?Sized = Self> {
     /// # use compact_encoding::encodable::CompactEncodable;
     /// let foo: Ipv4Addr = "0.0.0.0".parse()?;
     /// let mut buff = vec![0; foo.encoded_size()?];
-    /// foo.encoded_bytes(&mut buff)?;
+    /// foo.encode(&mut buff)?;
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     fn to_bytes(&self) -> Result<Vec<u8>, EncodingError> {
         let mut buff = vec![0; self.encoded_size()?];
-        self.encoded_bytes(&mut buff)?;
+        self.encode(&mut buff)?;
         Ok(buff)
     }
     /// Create an empty buffer of the correct size for encoding `self` to. This is just a helper
@@ -176,11 +176,11 @@ macro_rules! map_encodables {
     };
     // Base case: single field
     ($buffer:expr, $field:expr) => {
-        $field.encoded_bytes($buffer)?
+        $field.encode($buffer)?
     };
     // Recursive case: first field + rest
     ($buffer:expr, $first:expr, $($rest:expr),+) => {{
-        let rest = $first.encoded_bytes($buffer)?;
+        let rest = $first.encode($buffer)?;
         map_encodables!(rest, $($rest),+)
     }};
 }
@@ -311,7 +311,7 @@ pub fn map_encode<'a>(
 ) -> Result<&'a mut [u8], EncodingError> {
     let mut rest = buffer;
     for x in arr {
-        rest = x.encoded_bytes(rest)?;
+        rest = x.encode(rest)?;
     }
     Ok(rest)
 }
@@ -358,6 +358,9 @@ pub fn get_slices_checked(buffer: &[u8], mid: usize) -> Result<(&[u8], &[u8]), E
         ))
     })
 }
+
+/// Split a mutable slice into two mutable slices around `mid`.
+/// Returns encoding error when `mid` is out of bounds.
 fn get_slices_mut_checked(
     buffer: &mut [u8],
     mid: usize,
@@ -458,7 +461,7 @@ impl<const N: usize> CompactEncodable for [u8; N] {
         Ok(N)
     }
 
-    fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
         write_array(self, buffer)
     }
 
@@ -590,7 +593,7 @@ impl CompactEncodable for u8 {
         Ok(1)
     }
 
-    fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
         write_array(&[*self], buffer)
     }
 
@@ -608,7 +611,7 @@ impl CompactEncodable for u16 {
         Ok(U16_SIZE)
     }
 
-    fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
         encode_u16(*self, buffer)
     }
 
@@ -626,7 +629,7 @@ impl CompactEncodable for u32 {
         Ok(usize_encoded_size(*self as usize))
     }
 
-    fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
         encode_usize_var(&(*self as usize), buffer)
     }
 
@@ -642,7 +645,7 @@ impl CompactEncodable for u64 {
         Ok(u64_var_encoded_size(*self))
     }
 
-    fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
         u64_encoded_bytes(*self, buffer)
     }
 
@@ -659,7 +662,7 @@ impl CompactEncodable for String {
         encoded_size_str(self)
     }
 
-    fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
         encode_str(self, buffer)
     }
 
@@ -676,7 +679,7 @@ impl CompactEncodable<String> for str {
         encoded_size_str(self)
     }
 
-    fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
         encode_str(self, buffer)
     }
 
@@ -694,10 +697,10 @@ impl CompactEncodable for Vec<String> {
         Ok(out)
     }
 
-    fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
         let mut rest = usize_encoded_bytes(self.len(), buffer)?;
         for s in self {
-            rest = s.encoded_bytes(rest)?;
+            rest = s.encode(rest)?;
         }
         Ok(rest)
     }
@@ -722,7 +725,7 @@ impl CompactEncodable for Vec<u8> {
         Ok(usize_encoded_size(self.len()) + self.len())
     }
 
-    fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
         encode_buffer(self, buffer)
     }
 
@@ -739,10 +742,7 @@ impl CompactEncodable for Ipv4Addr {
         Ok(U32_SIZE)
     }
 
-    fn encoded_bytes<'a>(
-        &self,
-        buffer: &'a mut [u8],
-    ) -> std::result::Result<&'a mut [u8], EncodingError> {
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> std::result::Result<&'a mut [u8], EncodingError> {
         let Some((dest, rest)) = buffer.split_first_chunk_mut::<4>() else {
             return Err(EncodingError::out_of_bounds(&format!(
                 "Colud not encode {}, not enough room in buffer",
@@ -771,10 +771,7 @@ impl CompactEncodable for Ipv6Addr {
         Ok(4)
     }
 
-    fn encoded_bytes<'a>(
-        &self,
-        buffer: &'a mut [u8],
-    ) -> std::result::Result<&'a mut [u8], EncodingError> {
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> std::result::Result<&'a mut [u8], EncodingError> {
         let Some((dest, rest)) = buffer.split_first_chunk_mut::<16>() else {
             return Err(EncodingError::out_of_bounds(&format!(
                 "Colud not encode {}, not enough room in buffer",
@@ -805,7 +802,7 @@ fn encode_vec<'a, T: CompactEncodable + Sized>(
 ) -> Result<&'a mut [u8], EncodingError> {
     let mut rest = encode_usize_var(&vec.len(), buffer)?;
     for x in vec {
-        rest = <T as CompactEncodable>::encoded_bytes(x, rest)?;
+        rest = <T as CompactEncodable>::encode(x, rest)?;
     }
     Ok(rest)
 }
@@ -828,7 +825,7 @@ impl<T: VecEncodable> CompactEncodable for Vec<T> {
         T::vec_encoded_size(self)
     }
 
-    fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
         <T as VecEncodable>::vec_encode(self, buffer)
     }
 
@@ -919,7 +916,7 @@ impl<T: BoxArrayEncodable> CompactEncodable for Box<[T]> {
         T::boxed_array_encoded_size(self)
     }
 
-    fn encoded_bytes<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
         <T as BoxArrayEncodable>::box_encode(self, buffer)
     }
 
