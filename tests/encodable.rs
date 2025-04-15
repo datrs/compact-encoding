@@ -1,8 +1,5 @@
 use compact_encoding::{
-    create_buffer,
-    encodable::{create_buffer, CompactEncoding},
-    map_decode, map_encodables,
-    types::EncodingError,
+    create_buffer, encodable::CompactEncoding, map_decode, map_encode, types::EncodingError,
 };
 
 // The max value for 1 byte length is 252
@@ -21,7 +18,7 @@ fn cenc_basic() -> Result<(), EncodingError> {
     let mut buff = create_buffer!(str_value_1, str_value_2, u32_value_3, u32_value_4);
     assert_eq!(buff.len(), 1 + 3 + 1 + 252 + 1 + 4 + 1 + 4);
 
-    let rest = map_encodables!(
+    let rest = map_encode!(
         &mut buff,
         str_value_1,
         str_value_2,
@@ -46,7 +43,7 @@ fn cenc_string_long() -> Result<(), EncodingError> {
     let mut buffer = create_buffer!(value);
     assert_eq!(buffer.len(), 1 + 2 + 253);
 
-    let rest = map_encodables!(&mut buffer, value);
+    let rest = map_encode!(&mut buffer, value);
     assert!(rest.is_empty());
 
     let ((result,), rest) = map_decode!(&buffer, [String]);
@@ -61,7 +58,7 @@ fn cenc_u32_as_u16() -> Result<(), EncodingError> {
     let mut buffer = create_buffer!(value);
     // 1 byte for u16 signifier, 2 bytes for length
     assert_eq!(buffer.len(), 1 + 2);
-    let rest = map_encodables!(&mut buffer, value);
+    let rest = map_encode!(&mut buffer, value);
     assert!(rest.is_empty());
 
     let ((result,), rest) = map_decode!(&buffer, [u32]);
@@ -76,7 +73,7 @@ fn cenc_u32_as_u8() -> Result<(), EncodingError> {
     let mut buffer = create_buffer!(value);
     // 1 byte for data
     assert_eq!(buffer.len(), 1);
-    let rest = map_encodables!(&mut buffer, value);
+    let rest = map_encode!(&mut buffer, value);
     assert!(rest.is_empty());
 
     let ((result,), rest) = map_decode!(&buffer, [u32]);
@@ -91,7 +88,7 @@ fn cenc_u64() -> Result<(), EncodingError> {
     let mut buffer = create_buffer!(value);
     // 1 byte for u64 signifier, 8 bytes for length
     assert_eq!(buffer.len(), 1 + 8);
-    let rest = map_encodables!(&mut buffer, value);
+    let rest = map_encode!(&mut buffer, value);
     assert!(rest.is_empty());
     let ((result,), rest) = map_decode!(&buffer, [u64]);
     assert!(rest.is_empty());
@@ -105,7 +102,7 @@ fn cenc_u64_as_u32() -> Result<(), EncodingError> {
     let mut buffer = create_buffer!(value);
     // 1 byte for u32 signifier, 4 bytes for length
     assert_eq!(buffer.len(), 1 + 4);
-    let rest = map_encodables!(&mut buffer, value);
+    let rest = map_encode!(&mut buffer, value);
     assert!(rest.is_empty());
     let ((result,), rest) = map_decode!(&buffer, [u64]);
     assert!(rest.is_empty());
@@ -122,7 +119,7 @@ fn cenc_buffer() -> Result<(), EncodingError> {
     // 1 byte for length, 2 bytes for data
     // 1 byte for length, 3 bytes for data
     assert_eq!(buffer.len(), 1 + 2 + 1 + 3);
-    let rest = map_encodables!(&mut buffer, buf_value_1, buf_value_2);
+    let rest = map_encode!(&mut buffer, buf_value_1, buf_value_2);
     assert!(rest.is_empty());
     let (result, rest) = map_decode!(&buffer, [Box<[u8]>, Box<[u8]>]);
     assert!(rest.is_empty());
@@ -141,7 +138,7 @@ fn cenc_vec() -> Result<(), EncodingError> {
     // 1 byte for length, 4*3 bytes for data
     assert_eq!(buffer.len(), 1 + 2 + 1 + 12);
 
-    let rest = map_encodables!(&mut buffer, buf_value_1, buf_value_2);
+    let rest = map_encode!(&mut buffer, buf_value_1, buf_value_2);
     assert!(rest.is_empty());
     let (result, rest) = map_decode!(&buffer, [Vec<u8>, Vec<u32>]);
     assert!(rest.is_empty());
@@ -158,7 +155,7 @@ fn cenc_string_array() -> Result<(), EncodingError> {
     // 1 byte for string length, 5 bytes for string,
     // 1 byte for string length, 6 bytes for string
     assert_eq!(buffer.len(), 1 + 1 + 5 + 1 + 6);
-    let rest = map_encodables!(&mut buffer, value);
+    let rest = map_encode!(&mut buffer, value);
     assert!(rest.is_empty());
     let ((result,), rest) = map_decode!(&buffer, [Vec<String>]);
     assert!(rest.is_empty());
@@ -177,7 +174,7 @@ fn cenc_fixed_and_raw() -> Result<(), EncodingError> {
     // 1 byte for length, 4*3 bytes for data
     assert_eq!(buffer.len(), 16 + 32 + 3);
 
-    let rest = map_encodables!(&mut buffer, buf_value_1, buf_value_2, buf_value_3);
+    let rest = map_encode!(&mut buffer, buf_value_1, buf_value_2, buf_value_3);
     assert!(rest.is_empty());
     let (result, rest) = map_decode!(&buffer, [[u8; 16], [u8; 32], [u8; 3]]);
     assert!(rest.is_empty());
@@ -192,19 +189,18 @@ fn cenc_32_byte_array() -> Result<(), EncodingError> {
     let empty_array: Vec<[u8; 32]> = vec![];
     let one_array: Vec<[u8; 32]> = vec![[0; 32]];
     let many_array: Vec<[u8; 32]> = vec![[1; 32], [2; 32], [3; 32]];
-    let data = vec![empty_array.clone(), one_array.clone(), many_array.clone()];
     let expected_size = 1 + 1 + 32 + 1 + (3 * 32);
 
-    let mut buffer = create_buffer(&data)?;
+    let mut buffer = create_buffer!(empty_array, one_array, many_array);
     assert_eq!(buffer.len(), expected_size);
 
-    let rest = map_encodables!(&mut buffer, empty_array, one_array, many_array);
+    let rest = map_encode!(&mut buffer, empty_array, one_array, many_array);
     assert!(rest.is_empty());
 
     let (result, rest) = map_decode!(&buffer, [Vec<[u8; 32]>, Vec<[u8; 32]>, Vec<[u8;32]>]);
     assert!(rest.is_empty());
-    assert_eq!(result.0, data[0]);
-    assert_eq!(result.1, data[1]);
-    assert_eq!(result.2, data[2]);
+    assert_eq!(result.0, empty_array);
+    assert_eq!(result.1, one_array);
+    assert_eq!(result.2, many_array);
     Ok(())
 }

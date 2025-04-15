@@ -111,16 +111,16 @@ pub trait BoxArrayEncodable: CompactEncoding {
 /// [`CompactEncoding::encoded_size`] on all of them.
 /// Note this is macro is useful when your arguments have differing types.
 /// ```
-/// # use crate::compact_encoding::{sum_preencode, encodable::CompactEncoding};
+/// # use crate::compact_encoding::{sum_encoded_size, encodable::CompactEncoding};
 /// # use std::net::Ipv4Addr;
 /// let foo: Ipv4Addr = "0.0.0.0".parse()?;
 /// let bar = 42u64;
 /// let qux = "hello?";
-/// let result = sum_preencode!(foo, bar, qux);
+/// let result = sum_encoded_size!(foo, bar, qux);
 /// assert_eq!(result, 12);
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-macro_rules! sum_preencode {
+macro_rules! sum_encoded_size {
     ($($val:expr),+) => {{
         let out: usize = [
                 $(
@@ -161,16 +161,16 @@ macro_rules! create_buffer {
 /// Given a buffer and a list of [`CompactEncoding`] things, encode the arguments to the buffer.
 /// Note this is macro is useful when your arguments have differing types.
 /// ```
-/// # use crate::compact_encoding::{create_buffer, map_encodables, encodable::CompactEncoding};
+/// # use crate::compact_encoding::{create_buffer, map_encode, encodable::CompactEncoding};
 /// let num = 42u64;
 /// let word = "yo";
 /// let mut buff = create_buffer!(num, word);
-/// let result = map_encodables!(&mut buff, num, word);
+/// let result = map_encode!(&mut buff, num, word);
 /// assert!(result.is_empty());
-/// assert_eq!(&buff, &[42, 2, 121, 111]);
+/// assert_eq!(&buff, &[42, 2, b'y', b'o']);
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-macro_rules! map_encodables {
+macro_rules! map_encode {
     ($buffer:expr$(,)*) => {
         $buffer
     };
@@ -181,7 +181,7 @@ macro_rules! map_encodables {
     // Recursive case: first field + rest
     ($buffer:expr, $first:expr, $($rest:expr),+) => {{
         let rest = $first.encode($buffer)?;
-        map_encodables!(rest, $($rest),+)
+        map_encode!(rest, $($rest),+)
     }};
 }
 
@@ -196,9 +196,9 @@ macro_rules! map_encodables {
 /// ```
 macro_rules! to_encoded_bytes {
     ($($val:expr),*) => {{
-        use $crate::{map_encodables, create_buffer, encodable::CompactEncoding};
+        use $crate::{map_encode, create_buffer, encodable::CompactEncoding};
         let mut buffer = create_buffer!($($val),*);
-        map_encodables!(&mut buffer, $($val),*);
+        map_encode!(&mut buffer, $($val),*);
         buffer
     }}
 }
@@ -288,33 +288,6 @@ pub fn encoded_bytes_var_u64(uint: u64, buffer: &mut [u8]) -> Result<&mut [u8], 
         let rest = write_array(&[U64_SIGNIFIER], buffer)?;
         encode_u64(uint, rest)
     }
-}
-
-// TODO RMME - redundant with sum_encoded_size
-/// Sum encoded sizes
-pub fn encoded_size(arr: &[impl CompactEncoding]) -> Result<usize, EncodingError> {
-    let mut out = 0;
-    for x in arr {
-        out += x.encoded_size()?;
-    }
-    Ok(out)
-}
-
-/// Create a buffer from an array of CompactEncoding objects
-pub fn create_buffer(arr: &[impl CompactEncoding]) -> Result<Vec<u8>, EncodingError> {
-    Ok(vec![0; encoded_size(arr)?])
-}
-
-/// Encode an array of CompactEncoding objects
-pub fn map_encode<'a>(
-    arr: &[impl CompactEncoding],
-    buffer: &'a mut [u8],
-) -> Result<&'a mut [u8], EncodingError> {
-    let mut rest = buffer;
-    for x in arr {
-        rest = x.encode(rest)?;
-    }
-    Ok(rest)
 }
 
 /// decode a `usize` from `buffer` and return the remaining bytes
