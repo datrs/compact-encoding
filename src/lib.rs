@@ -200,7 +200,7 @@ pub trait CompactEncoding<Decode: ?Sized = Self> {
     /// foo.encode(&mut buff)?;
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    fn to_bytes(&self) -> Result<Vec<u8>, EncodingError> {
+    fn to_encoded_bytes(&self) -> Result<Vec<u8>, EncodingError> {
         let mut buff = vec![0; self.encoded_size()?];
         self.encode(&mut buff)?;
         Ok(buff)
@@ -413,79 +413,6 @@ macro_rules! map_first {
         (mapped, two)
     }};
 }
-
-/// The number of bytes required to encode this number. Note this is always variable width.
-pub fn usize_encoded_size(val: usize) -> usize {
-    if val < U16_SIGNIFIER.into() {
-        1
-    } else if val <= 0xffff {
-        3
-    } else if val <= 0xffffffff {
-        5
-    } else {
-        9
-    }
-}
-
-/// The number of bytes required to encode this number.
-/// We only need this for u64 because all other uints can be converted to usize reliably.
-pub fn encoded_size_var_u64(val: u64) -> usize {
-    if val < U16_SIGNIFIER.into() {
-        1
-    } else if val <= 0xffff {
-        3
-    } else if val <= 0xffffffff {
-        5
-    } else {
-        9
-    }
-}
-
-/// Write `uint` to the start of `buffer` and return the remaining part of `buffer`.
-pub fn encoded_bytes_var_u64(uint: u64, buffer: &mut [u8]) -> Result<&mut [u8], EncodingError> {
-    if uint < U16_SIGNIFIER.into() {
-        encode_u8(uint as u8, buffer)
-    } else if uint <= 0xffff {
-        let rest = write_array(&[U16_SIGNIFIER], buffer)?;
-        encode_u16(uint as u16, rest)
-    } else if uint <= 0xffffffff {
-        let rest = write_array(&[U32_SIGNIFIER], buffer)?;
-        encode_u32(uint as u32, rest)
-    } else {
-        let rest = write_array(&[U64_SIGNIFIER], buffer)?;
-        encode_u64(uint, rest)
-    }
-}
-
-/// Decode a `usize` from `buffer` and return the remaining bytes.
-/// This will fail, when we are decoding a `usize` on a usize = u32 machine for data that was originally encoded on a `usize = u64` machine whenever the value is over `u32::MAX`.
-pub fn decode_usize(buffer: &[u8]) -> Result<(usize, &[u8]), EncodingError> {
-    let [first, rest @ ..] = buffer else {
-        return Err(EncodingError::out_of_bounds(
-            "Colud not decode usize, empty buffer",
-        ));
-    };
-    let first = *first;
-    if first < U16_SIGNIFIER {
-        Ok((first.into(), rest))
-    } else if first == U16_SIGNIFIER {
-        let (out, rest) = decode_u16(buffer)?;
-        return Ok((out.into(), rest));
-    } else if first == U32_SIGNIFIER {
-        let (out, rest) = decode_u32(buffer)?;
-        let out: usize = out
-            .try_into()
-            .map_err(|_e| EncodingError::overflow("u32 is bigger than usize"))?;
-        return Ok((out, rest));
-    } else {
-        let (out, rest) = decode_u64(buffer)?;
-        let out: usize = out
-            .try_into()
-            .map_err(|_e| EncodingError::overflow("u64 is bigger than usize"))?;
-        return Ok((out, rest));
-    }
-}
-
 /// Split a slice in two at `mid`. Returns encoding error when `mid` is out of bounds.
 pub fn get_slices_checked(buffer: &[u8], mid: usize) -> Result<(&[u8], &[u8]), EncodingError> {
     buffer.split_at_checked(mid).ok_or_else(|| {
@@ -562,10 +489,6 @@ pub fn write_slice<'a>(source: &[u8], buffer: &'a mut [u8]) -> Result<&'a mut [u
     Ok(rest)
 }
 
-fn encoded_size_str(value: &str) -> Result<usize, EncodingError> {
-    Ok(usize_encoded_size(value.len()) + value.len())
-}
-
 /// Helper to convert a vec to an array, and fail with an encoding error when needed
 pub fn bytes_fixed_from_vec<const N: usize>(value: &[u8]) -> Result<[u8; N], EncodingError> {
     <[u8; N]>::try_from(value).map_err(|e| {
@@ -575,6 +498,82 @@ pub fn bytes_fixed_from_vec<const N: usize>(value: &[u8]) -> Result<[u8; N], Enc
             N
         ))
     })
+}
+
+fn encoded_size_str(value: &str) -> Result<usize, EncodingError> {
+    Ok(encoded_size_usize(value.len()) + value.len())
+}
+
+/// The number of bytes required to encode this number. Note this is always variable width.
+pub fn encoded_size_usize(val: usize) -> usize {
+    if val < U16_SIGNIFIER.into() {
+        1
+    } else if val <= 0xffff {
+        3
+    } else if val <= 0xffffffff {
+        5
+    } else {
+        9
+    }
+}
+
+/// The number of bytes required to encode this number.
+/// We only need this for u64 because all other uints can be converted to usize reliably.
+pub fn encoded_size_var_u64(val: u64) -> usize {
+    if val < U16_SIGNIFIER.into() {
+        1
+    } else if val <= 0xffff {
+        3
+    } else if val <= 0xffffffff {
+        5
+    } else {
+        9
+    }
+}
+
+/// Write `uint` to the start of `buffer` and return the remaining part of `buffer`.
+pub fn encode_var_u64(uint: u64, buffer: &mut [u8]) -> Result<&mut [u8], EncodingError> {
+    if uint < U16_SIGNIFIER.into() {
+        encode_u8(uint as u8, buffer)
+    } else if uint <= 0xffff {
+        let rest = write_array(&[U16_SIGNIFIER], buffer)?;
+        encode_u16(uint as u16, rest)
+    } else if uint <= 0xffffffff {
+        let rest = write_array(&[U32_SIGNIFIER], buffer)?;
+        encode_u32(uint as u32, rest)
+    } else {
+        let rest = write_array(&[U64_SIGNIFIER], buffer)?;
+        encode_u64(uint, rest)
+    }
+}
+
+/// Decode a `usize` from `buffer` and return the remaining bytes.
+/// This will fail, when we are decoding a `usize` on a usize = u32 machine for data that was originally encoded on a `usize = u64` machine whenever the value is over `u32::MAX`.
+pub fn decode_usize(buffer: &[u8]) -> Result<(usize, &[u8]), EncodingError> {
+    let [first, rest @ ..] = buffer else {
+        return Err(EncodingError::out_of_bounds(
+            "Colud not decode usize, empty buffer",
+        ));
+    };
+    let first = *first;
+    if first < U16_SIGNIFIER {
+        Ok((first.into(), rest))
+    } else if first == U16_SIGNIFIER {
+        let (out, rest) = decode_u16(buffer)?;
+        return Ok((out.into(), rest));
+    } else if first == U32_SIGNIFIER {
+        let (out, rest) = decode_u32(buffer)?;
+        let out: usize = out
+            .try_into()
+            .map_err(|_e| EncodingError::overflow("u32 is bigger than usize"))?;
+        return Ok((out, rest));
+    } else {
+        let (out, rest) = decode_u64(buffer)?;
+        let out: usize = out
+            .try_into()
+            .map_err(|_e| EncodingError::overflow("u64 is bigger than usize"))?;
+        return Ok((out, rest));
+    }
 }
 
 /// Encoded a fixed sized array to a buffer
@@ -591,23 +590,6 @@ pub fn decode_bytes_fixed<const N: usize>(
 ) -> Result<([u8; N], &[u8]), EncodingError> {
     take_array(buffer)
     //write_array(value, buffer)
-}
-
-impl<const N: usize> CompactEncoding for [u8; N] {
-    fn encoded_size(&self) -> Result<usize, EncodingError> {
-        Ok(N)
-    }
-
-    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
-        write_array(self, buffer)
-    }
-
-    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
-    where
-        Self: Sized,
-    {
-        take_array(buffer)
-    }
 }
 
 fn decode_u16(buffer: &[u8]) -> Result<(u16, &[u8]), EncodingError> {
@@ -725,6 +707,23 @@ fn encode_buffer<'a>(value: &[u8], buffer: &'a mut [u8]) -> Result<&'a mut [u8],
     write_slice(value, rest)
 }
 
+impl<const N: usize> CompactEncoding for [u8; N] {
+    fn encoded_size(&self) -> Result<usize, EncodingError> {
+        Ok(N)
+    }
+
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+        write_array(self, buffer)
+    }
+
+    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
+    where
+        Self: Sized,
+    {
+        take_array(buffer)
+    }
+}
+
 impl CompactEncoding for u8 {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
         Ok(1)
@@ -763,7 +762,7 @@ impl CompactEncoding for u16 {
 // NB: we want u32 encoded and decoded as variable sized uint
 impl CompactEncoding for u32 {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
-        Ok(usize_encoded_size(*self as usize))
+        Ok(encoded_size_usize(*self as usize))
     }
 
     fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
@@ -783,7 +782,7 @@ impl CompactEncoding for u64 {
     }
 
     fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
-        encoded_bytes_var_u64(*self, buffer)
+        encode_var_u64(*self, buffer)
     }
 
     fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
@@ -827,7 +826,7 @@ impl CompactEncoding<String> for str {
 
 impl CompactEncoding for Vec<String> {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
-        let mut out = usize_encoded_size(self.len());
+        let mut out = encoded_size_usize(self.len());
         for s in self {
             out += s.encoded_size()?;
         }
@@ -859,7 +858,7 @@ impl CompactEncoding for Vec<String> {
 
 impl CompactEncoding for Vec<u8> {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
-        Ok(usize_encoded_size(self.len()) + self.len())
+        Ok(encoded_size_usize(self.len()) + self.len())
     }
 
     fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
@@ -977,7 +976,7 @@ impl VecEncodable for u32 {
     where
         Self: Sized,
     {
-        Ok(usize_encoded_size(vec.len()) + (vec.len() * 4))
+        Ok(encoded_size_usize(vec.len()) + (vec.len() * 4))
     }
     /// Encode `vec` to `buffer`
     fn vec_encode<'a>(vec: &[Self], buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError>
@@ -1013,7 +1012,7 @@ impl<const N: usize> VecEncodable for [u8; N] {
     where
         Self: Sized,
     {
-        Ok(usize_encoded_size(vec.len()) + (vec.len() * N))
+        Ok(encoded_size_usize(vec.len()) + (vec.len() * N))
     }
 }
 
@@ -1022,7 +1021,7 @@ impl BoxArrayEncodable for u8 {
     where
         Self: Sized,
     {
-        Ok(usize_encoded_size(boxed.len()) + boxed.len())
+        Ok(encoded_size_usize(boxed.len()) + boxed.len())
     }
 
     fn box_encode<'a>(
@@ -1077,7 +1076,7 @@ mod test {
     }
     macro_rules! check_usize_var_enc_dec {
         ($size:expr, $value:expr) => {
-            let mut buffer = vec![0; usize_encoded_size($value)];
+            let mut buffer = vec![0; encoded_size_usize($value)];
             assert_eq!(buffer.len(), $size);
             let remaining = encode_usize_var(&$value, &mut buffer)?;
             assert!(remaining.is_empty());
