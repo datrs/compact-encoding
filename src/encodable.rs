@@ -13,7 +13,7 @@ const U16_SIZE: usize = 2;
 const U32_SIZE: usize = 4;
 
 /// Implement for a type to get encoding and decoding.
-pub trait CompactEncodable<Decode: ?Sized = Self> {
+pub trait CompactEncoding<Decode: ?Sized = Self> {
     /// The size in bytes required to encode `self`.
     fn encoded_size(&self) -> Result<usize, EncodingError>;
     /// Encode `self` into `buffer` returning the remainder of `buffer`.
@@ -27,7 +27,7 @@ pub trait CompactEncodable<Decode: ?Sized = Self> {
     /// encoding to it in one step.
     /// ```
     /// # use std::net::Ipv4Addr;
-    /// # use compact_encoding::encodable::CompactEncodable;
+    /// # use compact_encoding::encodable::CompactEncoding;
     /// let foo: Ipv4Addr = "0.0.0.0".parse()?;
     /// let mut buff = vec![0; foo.encoded_size()?];
     /// foo.encode(&mut buff)?;
@@ -42,7 +42,7 @@ pub trait CompactEncodable<Decode: ?Sized = Self> {
     /// method for: encoding to it in one step.
     /// ```
     /// # use std::net::Ipv4Addr;
-    /// # use compact_encoding::encodable::CompactEncodable;
+    /// # use compact_encoding::encodable::CompactEncoding;
     /// let foo: Ipv4Addr = "0.0.0.0".parse()?;
     /// vec![0; foo.encoded_size()?];
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -52,8 +52,8 @@ pub trait CompactEncodable<Decode: ?Sized = Self> {
     }
 }
 
-/// Implement this for type `T` to have `CompactEncodable` implemented for `Vec<T>`
-pub trait VecEncodable: CompactEncodable {
+/// Implement this for type `T` to have `CompactEncoding` implemented for `Vec<T>`
+pub trait VecEncodable: CompactEncoding {
     /// Calculate the resulting size in bytes of `vec`
     fn vec_encoded_size(vec: &[Self]) -> Result<usize, EncodingError>
     where
@@ -78,8 +78,8 @@ pub trait VecEncodable: CompactEncodable {
 
 // NB: we DO want &Box<..> because we want the trait to work for  boxed things
 #[allow(clippy::borrowed_box)]
-/// Define this trait for `T` to get `Box<[T]>: CompactEncodable`
-pub trait BoxArrayEncodable: CompactEncodable {
+/// Define this trait for `T` to get `Box<[T]>: CompactEncoding`
+pub trait BoxArrayEncodable: CompactEncoding {
     /// The encoded size in bytes
     fn boxed_array_encoded_size(boxed: &Box<[Self]>) -> Result<usize, EncodingError>
     where
@@ -107,11 +107,11 @@ pub trait BoxArrayEncodable: CompactEncodable {
 }
 
 #[macro_export]
-/// Given a list of [`CompactEncodable`] things, sum the result of calling
-/// [`CompactEncodable::encoded_size`] on all of them.
+/// Given a list of [`CompactEncoding`] things, sum the result of calling
+/// [`CompactEncoding::encoded_size`] on all of them.
 /// Note this is macro is useful when your arguments have differing types.
 /// ```
-/// # use crate::compact_encoding::{sum_preencode, encodable::CompactEncodable};
+/// # use crate::compact_encoding::{sum_preencode, encodable::CompactEncoding};
 /// # use std::net::Ipv4Addr;
 /// let foo: Ipv4Addr = "0.0.0.0".parse()?;
 /// let bar = 42u64;
@@ -133,10 +133,10 @@ macro_rules! sum_preencode {
 }
 
 #[macro_export]
-/// Given a list of [`CompactEncodable`] things, create a zeroed buffer of the correct size for encoding.
+/// Given a list of [`CompactEncoding`] things, create a zeroed buffer of the correct size for encoding.
 /// Note this is macro is useful when your arguments have differing types.
 /// ```
-/// # use crate::compact_encoding::{create_buffer, encodable::CompactEncodable};
+/// # use crate::compact_encoding::{create_buffer, encodable::CompactEncoding};
 /// # use std::net::Ipv4Addr;
 /// let foo: Ipv4Addr = "0.0.0.0".parse()?;
 /// let bar = 42u64;
@@ -158,10 +158,10 @@ macro_rules! create_buffer {
 }
 
 #[macro_export]
-/// Given a buffer and a list of [`CompactEncodable`] things, encode the arguments to the buffer.
+/// Given a buffer and a list of [`CompactEncoding`] things, encode the arguments to the buffer.
 /// Note this is macro is useful when your arguments have differing types.
 /// ```
-/// # use crate::compact_encoding::{create_buffer, map_encodables, encodable::CompactEncodable};
+/// # use crate::compact_encoding::{create_buffer, map_encodables, encodable::CompactEncoding};
 /// let num = 42u64;
 /// let word = "yo";
 /// let mut buff = create_buffer!(num, word);
@@ -186,7 +186,7 @@ macro_rules! map_encodables {
 }
 
 #[macro_export]
-/// Given a list of [`CompactEncodable`] things, encode the arguments to the buffer.
+/// Given a list of [`CompactEncoding`] things, encode the arguments to the buffer.
 /// Note this is macro is useful when your arguments have differing types.
 /// ```
 /// # use crate::compact_encoding::to_encoded_bytes;
@@ -196,7 +196,7 @@ macro_rules! map_encodables {
 /// ```
 macro_rules! to_encoded_bytes {
     ($($val:expr),*) => {{
-        use $crate::{map_encodables, create_buffer, encodable::CompactEncodable};
+        use $crate::{map_encodables, create_buffer, encodable::CompactEncoding};
         let mut buffer = create_buffer!($($val),*);
         map_encodables!(&mut buffer, $($val),*);
         buffer
@@ -220,7 +220,7 @@ macro_rules! map_decode {
     ($buffer:expr, [
         $($field_type:ty),* $(,)?
     ]) => {{
-        use $crate::encodable::CompactEncodable;
+        use $crate::encodable::CompactEncoding;
         let mut current_buffer: &[u8] = $buffer;
 
         // Decode each type into `result_tuple`
@@ -247,7 +247,7 @@ macro_rules! map_first {
     }};
 }
 
-/// The number of bytes required to encode this number
+/// The number of bytes required to encode this number. Note this is always variable width.
 pub fn usize_encoded_size(val: usize) -> usize {
     if val < U16_SIGNIFIER.into() {
         1
@@ -262,7 +262,7 @@ pub fn usize_encoded_size(val: usize) -> usize {
 
 /// The number of bytes required to encode this number.
 /// We only need this for u64 because all other uints can be converted to usize reliably.
-pub fn u64_var_encoded_size(val: u64) -> usize {
+pub fn encoded_size_var_u64(val: u64) -> usize {
     if val < U16_SIGNIFIER.into() {
         1
     } else if val <= 0xffff {
@@ -275,7 +275,7 @@ pub fn u64_var_encoded_size(val: u64) -> usize {
 }
 
 /// Write `uint` to the start of `buffer` and return the remaining part of `buffer`.
-pub fn u64_encoded_bytes(uint: u64, buffer: &mut [u8]) -> Result<&mut [u8], EncodingError> {
+pub fn encoded_bytes_var_u64(uint: u64, buffer: &mut [u8]) -> Result<&mut [u8], EncodingError> {
     if uint < U16_SIGNIFIER.into() {
         encode_u8(uint as u8, buffer)
     } else if uint <= 0xffff {
@@ -290,8 +290,9 @@ pub fn u64_encoded_bytes(uint: u64, buffer: &mut [u8]) -> Result<&mut [u8], Enco
     }
 }
 
+// TODO RMME - redundant with sum_encoded_size
 /// Sum encoded sizes
-pub fn encoded_size(arr: &[impl CompactEncodable]) -> Result<usize, EncodingError> {
+pub fn encoded_size(arr: &[impl CompactEncoding]) -> Result<usize, EncodingError> {
     let mut out = 0;
     for x in arr {
         out += x.encoded_size()?;
@@ -299,14 +300,14 @@ pub fn encoded_size(arr: &[impl CompactEncodable]) -> Result<usize, EncodingErro
     Ok(out)
 }
 
-/// Create a buffer from an array of CompactEncodable objects
-pub fn create_buffer(arr: &[impl CompactEncodable]) -> Result<Vec<u8>, EncodingError> {
+/// Create a buffer from an array of CompactEncoding objects
+pub fn create_buffer(arr: &[impl CompactEncoding]) -> Result<Vec<u8>, EncodingError> {
     Ok(vec![0; encoded_size(arr)?])
 }
 
-/// Encode an array of CompactEncodable objects
+/// Encode an array of CompactEncoding objects
 pub fn map_encode<'a>(
-    arr: &[impl CompactEncodable],
+    arr: &[impl CompactEncoding],
     buffer: &'a mut [u8],
 ) -> Result<&'a mut [u8], EncodingError> {
     let mut rest = buffer;
@@ -316,13 +317,8 @@ pub fn map_encode<'a>(
     Ok(rest)
 }
 
-/// Write `uint` to the start of `buffer` and return the remaining part of `buffer`.
-pub fn usize_encoded_bytes(uint: usize, buffer: &mut [u8]) -> Result<&mut [u8], EncodingError> {
-    u64_encoded_bytes(uint as u64, buffer)
-}
-
 /// decode a `usize` from `buffer` and return the remaining bytes
-pub fn usize_decode(buffer: &[u8]) -> Result<(usize, &[u8]), EncodingError> {
+pub fn decode_usize(buffer: &[u8]) -> Result<(usize, &[u8]), EncodingError> {
     let [first, rest @ ..] = buffer else {
         return Err(EncodingError::out_of_bounds(
             "Colud not decode usize, empty buffer",
@@ -456,7 +452,7 @@ pub fn decode_bytes_fixed<const N: usize>(
     //write_array(value, buffer)
 }
 
-impl<const N: usize> CompactEncodable for [u8; N] {
+impl<const N: usize> CompactEncoding for [u8; N] {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
         Ok(N)
     }
@@ -588,7 +584,7 @@ fn encode_buffer<'a>(value: &[u8], buffer: &'a mut [u8]) -> Result<&'a mut [u8],
     write_slice(value, rest)
 }
 
-impl CompactEncodable for u8 {
+impl CompactEncoding for u8 {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
         Ok(1)
     }
@@ -606,7 +602,7 @@ impl CompactEncodable for u8 {
     }
 }
 
-impl CompactEncodable for u16 {
+impl CompactEncoding for u16 {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
         Ok(U16_SIZE)
     }
@@ -624,7 +620,7 @@ impl CompactEncodable for u16 {
 }
 
 // NB: we want u32 encoded and decoded as variable sized uint
-impl CompactEncodable for u32 {
+impl CompactEncoding for u32 {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
         Ok(usize_encoded_size(*self as usize))
     }
@@ -640,13 +636,13 @@ impl CompactEncodable for u32 {
         decode_u32_var(buffer)
     }
 }
-impl CompactEncodable for u64 {
+impl CompactEncoding for u64 {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
-        Ok(u64_var_encoded_size(*self))
+        Ok(encoded_size_var_u64(*self))
     }
 
     fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
-        u64_encoded_bytes(*self, buffer)
+        encoded_bytes_var_u64(*self, buffer)
     }
 
     fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
@@ -657,7 +653,7 @@ impl CompactEncodable for u64 {
     }
 }
 
-impl CompactEncodable for String {
+impl CompactEncoding for String {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
         encoded_size_str(self)
     }
@@ -674,7 +670,7 @@ impl CompactEncodable for String {
     }
 }
 
-impl CompactEncodable<String> for str {
+impl CompactEncoding<String> for str {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
         encoded_size_str(self)
     }
@@ -688,7 +684,7 @@ impl CompactEncodable<String> for str {
     }
 }
 
-impl CompactEncodable for Vec<String> {
+impl CompactEncoding for Vec<String> {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
         let mut out = usize_encoded_size(self.len());
         for s in self {
@@ -698,7 +694,7 @@ impl CompactEncodable for Vec<String> {
     }
 
     fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
-        let mut rest = usize_encoded_bytes(self.len(), buffer)?;
+        let mut rest = encode_usize_var(&self.len(), buffer)?;
         for s in self {
             rest = s.encode(rest)?;
         }
@@ -720,7 +716,7 @@ impl CompactEncodable for Vec<String> {
     }
 }
 
-impl CompactEncodable for Vec<u8> {
+impl CompactEncoding for Vec<u8> {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
         Ok(usize_encoded_size(self.len()) + self.len())
     }
@@ -737,7 +733,7 @@ impl CompactEncodable for Vec<u8> {
     }
 }
 
-impl CompactEncodable for Ipv4Addr {
+impl CompactEncoding for Ipv4Addr {
     fn encoded_size(&self) -> std::result::Result<usize, EncodingError> {
         Ok(U32_SIZE)
     }
@@ -766,7 +762,7 @@ impl CompactEncodable for Ipv4Addr {
         Ok((Ipv4Addr::from(*dest), rest))
     }
 }
-impl CompactEncodable for Ipv6Addr {
+impl CompactEncoding for Ipv6Addr {
     fn encoded_size(&self) -> std::result::Result<usize, EncodingError> {
         Ok(4)
     }
@@ -796,31 +792,29 @@ impl CompactEncodable for Ipv6Addr {
     }
 }
 
-fn encode_vec<'a, T: CompactEncodable + Sized>(
+fn encode_vec<'a, T: CompactEncoding + Sized>(
     vec: &[T],
     buffer: &'a mut [u8],
 ) -> Result<&'a mut [u8], EncodingError> {
     let mut rest = encode_usize_var(&vec.len(), buffer)?;
     for x in vec {
-        rest = <T as CompactEncodable>::encode(x, rest)?;
+        rest = <T as CompactEncoding>::encode(x, rest)?;
     }
     Ok(rest)
 }
 
-fn decode_vec<T: CompactEncodable + Sized>(
-    buffer: &[u8],
-) -> Result<(Vec<T>, &[u8]), EncodingError> {
+fn decode_vec<T: CompactEncoding + Sized>(buffer: &[u8]) -> Result<(Vec<T>, &[u8]), EncodingError> {
     let (len, mut rest) = decode_usize_var(buffer)?;
     let mut out = Vec::with_capacity(len);
     for _ in 0..len {
-        let res = <T as CompactEncodable>::decode(rest)?;
+        let res = <T as CompactEncoding>::decode(rest)?;
         out.push(res.0);
         rest = res.1;
     }
     Ok((out, rest))
 }
 
-impl<T: VecEncodable> CompactEncodable for Vec<T> {
+impl<T: VecEncodable> CompactEncoding for Vec<T> {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
         T::vec_encoded_size(self)
     }
@@ -911,7 +905,7 @@ impl BoxArrayEncodable for u8 {
     }
 }
 
-impl<T: BoxArrayEncodable> CompactEncodable for Box<[T]> {
+impl<T: BoxArrayEncodable> CompactEncoding for Box<[T]> {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
         T::boxed_array_encoded_size(self)
     }

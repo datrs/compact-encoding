@@ -1,6 +1,6 @@
 use compact_encoding::{
     create_buffer,
-    encodable::{create_buffer, CompactEncodable},
+    encodable::{create_buffer, CompactEncoding},
     map_decode, map_encodables,
     types::EncodingError,
 };

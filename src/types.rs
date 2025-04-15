@@ -1,5 +1,5 @@
 //! Basic types of compact_encoding.
-use crate::encodable::CompactEncodable;
+use crate::encodable::CompactEncoding as Cenc;
 use std::convert::TryFrom;
 use std::fmt;
 use std::ops::Range;
@@ -805,14 +805,14 @@ impl State {
     }
 
     /// Like [`State::preencode`] but for `CompactEncodable` types
-    pub fn preencode_t<T: CompactEncodable>(&mut self, value: &T) -> Result<usize, EncodingError> {
+    pub fn preencode_t<T: Cenc>(&mut self, value: &T) -> Result<usize, EncodingError> {
         let size = value.encoded_size()?;
         let out = self.add_end(size)?;
         Ok(out)
     }
 
     /// Like [`State::encode`] but for `CompactEncodable` types
-    pub fn encode_t<T: CompactEncodable>(
+    pub fn encode_t<T: Cenc>(
         &mut self,
         value: &T,
         buffer: &mut [u8],
@@ -824,7 +824,7 @@ impl State {
     }
 
     /// Like [`State::decode`] but for `CompactEncodable` types
-    pub fn decode_t<T: CompactEncodable>(&mut self, buffer: &[u8]) -> Result<T, EncodingError> {
+    pub fn decode_t<T: Cenc>(&mut self, buffer: &[u8]) -> Result<T, EncodingError> {
         let start_len = buffer.len();
         let (result, remaining_buffer) = T::decode(buffer)?;
         let after = remaining_buffer.len();
