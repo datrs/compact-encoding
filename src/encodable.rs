@@ -1,4 +1,159 @@
-//! CompactEncodable stuff
+#![forbid(unsafe_code, missing_docs)]
+#![cfg_attr(test, deny(warnings))]
+
+//! # Series of compact encoding schemes for building small and fast parsers and serializers
+//!
+//! Binary compatible with the
+//! [original Javascript compact-encoding library](https://github.com/compact-encoding/compact-encoding/).
+//!
+//! ## Usage
+//!
+//! ### Quick start
+//! ```
+//! use compact_encoding::{to_encoded_bytes, map_decode};
+//!
+//! let number = 41_u32;
+//! let word = "hi";
+//!
+//! let encoded_buffer = to_encoded_bytes!(number, word);
+//! let ((number_dec, word_dec), remaining_buffer) = map_decode!(&encoded_buffer, [u32, String]);
+//!
+//! assert!(remaining_buffer.is_empty());
+//! assert_eq!(number_dec, number);
+//! assert_eq!(word_dec, word);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//! ### Manually implement encoding and decoding
+//!
+//! This example shows how to manually calculate the needed buffer size, create the buffer, encode
+//! data, and decode it. Using only the types which include a default [`CompactEncoding`]
+//! implementation. A more ergonomic pattern is demonstrated in other examples
+//! ```
+//! use compact_encoding::encodable::CompactEncoding;
+//!
+//! let number = 41_u32;
+//! let word = "hi";
+//!
+//! // Use `encoded_size` to figure out how big a buffer should be.
+//! let size = number.encoded_size()? + word.encoded_size()?;
+//!
+//! // Create a buffer with the calculated size
+//! let mut buffer = vec![0; size];
+//! assert_eq!(buffer.len(), 1 + 1 + 2);
+//!
+//! // Then actually encode the values
+//! let mut remaining_buffer = number.encode(&mut buffer)?;
+//! remaining_buffer = word.encode(remaining_buffer)?;
+//! assert!(remaining_buffer.is_empty());
+//! assert_eq!(buffer.to_vec(), vec![41_u8, 2_u8, b'h', b'i']);
+//!
+//! // `buffer` now contains all the encoded data, and we can decode from it
+//! let (number_dec, remaining_buffer) = u32::decode(&buffer)?;
+//! let (word_dec, remaining_buffer) = String::decode(remaining_buffer)?;
+//! assert!(remaining_buffer.is_empty());
+//! assert_eq!(number_dec, number);
+//! assert_eq!(word_dec, word);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ### Implementing CompactEncoding for new types
+//!
+//! You can implement [`CompactEncoding`]` for your own structs like below:
+//! ```
+//! use compact_encoding::{
+//!     to_encoded_bytes, map_encode, map_decode, sum_encoded_size,
+//!     {encodable::CompactEncoding, EncodingError}
+//! };
+//!
+//! #[derive(Debug, PartialEq)]
+//! struct MyStruct {
+//!     some_flag: bool,
+//!     values: Option<Vec<[u8; 32]>>,
+//!     other: String,
+//!     stuff: u64,
+//! }
+//!
+//! impl CompactEncoding for MyStruct {
+//!     fn encoded_size(&self) -> Result<usize, EncodingError> {
+//!         Ok(1 /* flags */ + {
+//!              /* handle option values */
+//!             if let Some(values) = &self.values  {
+//!                 values.encoded_size()?
+//!             } else {
+//!                 0
+//!             }
+//!         } + dbg!(sum_encoded_size!(&self.other, &self.stuff)))
+//!     }
+//!
+//!     fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+//!         let mut flags: u8 = 0;
+//!         if self.some_flag {
+//!             flags |= 1;
+//!         }
+//!         if self.values.is_some() {
+//!             flags |= 2;
+//!         }
+//!         let mut rest = flags.encode(buffer)?;
+//!         if let Some(values) = &self.values {
+//!             rest = values.encode(rest)?;
+//!         }
+//!         Ok(map_encode!(rest, self.other, self.stuff))
+//!     }
+//!
+//!     fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError> {
+//!        let (flags, rest) = u8::decode(buffer)?;
+//!        let some_flag: bool = flags & 1 != 0;
+//!        let (values, rest) = if flags & 2 != 0 {
+//!            let (vec, rest) = <Vec<[u8; 32]>>::decode(rest)?;
+//!            (Some(vec), rest)
+//!        } else {
+//!            (None, rest)
+//!        };
+//!        let ((other, stuff), rest) = map_decode!(rest, [String, u64]);
+//!        Ok((Self {
+//!             some_flag,
+//!             values,
+//!             other,
+//!             stuff
+//!        }, rest))
+//!     }
+//! }
+//!
+//! // Test values
+//! let foo = MyStruct {
+//!     some_flag: false,
+//!     values: None,
+//!     other: "hi".to_string(),
+//!     stuff: 42,
+//! };
+//!
+//! let bar = MyStruct {
+//!     some_flag: true,
+//!     values: Some(vec![[1; 32], [2; 32]]),
+//!     other: "yo".to_string(),
+//!     stuff: 0
+//! };
+//!
+//! // Encode `foo` and `bar` to a buffer
+//! let buffer = to_encoded_bytes!(&foo, &bar);
+//!
+//! // With the above use of a flags byte, the empty value encodes to only one byte
+//! assert_eq!(buffer.len(),
+//!     // flags + string + u64
+//!     (1 + 3 + 1) +
+//!     // "" + (values.len().encoded_size() + (values.len() * <[u8;32]>::encoded_size()) + ""
+//!     (1 + (1 + (2 * 32)) + 3 + 1)
+//! );
+//!
+//! // And decode directly to your own struct
+//! let (foo_dec, rest) = MyStruct::decode(&buffer)?;
+//! let (bar_dec, rest) = MyStruct::decode(&rest)?;
+//! // Ensure all bytes were used
+//! assert!(rest.is_empty());
+//! assert_eq!(foo_dec, foo);
+//! assert_eq!(bar_dec, bar);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 use std::{
     any::type_name,
     net::{Ipv4Addr, Ipv6Addr},
@@ -16,9 +171,12 @@ const U32_SIZE: usize = 4;
 pub trait CompactEncoding<Decode: ?Sized = Self> {
     /// The size in bytes required to encode `self`.
     fn encoded_size(&self) -> Result<usize, EncodingError>;
+
     /// Encode `self` into `buffer` returning the remainder of `buffer`.
     fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError>;
-    /// Decode a value of type [`Decode`] from `buffer`. Returns the decoded value and remaining undecoded bytes.
+
+    /// Decode a value from the given `buffer` of the type specified by the `Decode` type parameter
+    /// (which defaults to `Self`). Returns the decoded value and remaining undecoded bytes.
     fn decode(buffer: &[u8]) -> Result<(Decode, &[u8]), EncodingError>
     where
         Decode: Sized;
@@ -290,7 +448,8 @@ pub fn encoded_bytes_var_u64(uint: u64, buffer: &mut [u8]) -> Result<&mut [u8], 
     }
 }
 
-/// decode a `usize` from `buffer` and return the remaining bytes
+/// Decode a `usize` from `buffer` and return the remaining bytes.
+/// This will fail, when we are decoding a `usize` on a usize = u32 machine for data that was originally encoded on a `usize = u64` machine whenever the value is over `u32::MAX`.
 pub fn decode_usize(buffer: &[u8]) -> Result<(usize, &[u8]), EncodingError> {
     let [first, rest @ ..] = buffer else {
         return Err(EncodingError::out_of_bounds(
