@@ -1,5 +1,5 @@
 use compact_encoding::{
-    create_buffer, encodable::CompactEncoding, map_decode, map_encode, types::EncodingError,
+    create_buffer, map_decode, map_encode, types::EncodingError, CompactEncoding,
 };
 
 // The max value for 1 byte length is 252

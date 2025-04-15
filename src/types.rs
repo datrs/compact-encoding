@@ -1,10 +1,6 @@
 //! Basic types of compact_encoding.
 use std::fmt;
 
-pub(crate) const U16_SIGNIFIER: u8 = 0xfd;
-pub(crate) const U32_SIGNIFIER: u8 = 0xfe;
-pub(crate) const U64_SIGNIFIER: u8 = 0xff;
-
 /// Specific type [EncodingError]
 #[derive(fmt::Debug, Clone, PartialEq)]
 pub enum EncodingErrorKind {

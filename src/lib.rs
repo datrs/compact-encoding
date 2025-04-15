@@ -29,7 +29,7 @@
 //! data, and decode it. Using only the types which include a default [`CompactEncoding`]
 //! implementation. A more ergonomic pattern is demonstrated in other examples
 //! ```
-//! use compact_encoding::encodable::CompactEncoding;
+//! use compact_encoding::CompactEncoding;
 //!
 //! let number = 41_u32;
 //! let word = "hi";
@@ -62,7 +62,7 @@
 //! ```
 //! use compact_encoding::{
 //!     map_decode, map_encode, sum_encoded_size, to_encoded_bytes,
-//!     {encodable::CompactEncoding, EncodingError},
+//!     CompactEncoding, EncodingError,
 //! };
 //!
 //! #[derive(Debug, PartialEq)]
@@ -158,13 +158,20 @@
 //! assert_eq!(bar_dec, bar);
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
-mod types;
+pub mod types;
 use std::{
     any::type_name,
     net::{Ipv4Addr, Ipv6Addr},
 };
 
-use crate::types::{EncodingError, U16_SIGNIFIER, U32_SIGNIFIER, U64_SIGNIFIER};
+pub use crate::types::{EncodingError, EncodingErrorKind};
+
+/// indicates a variable width unsigned integer fits in u16
+pub const U16_SIGNIFIER: u8 = 0xfd;
+/// indicates a variable width unsigned integer fits in u32
+pub const U32_SIGNIFIER: u8 = 0xfe;
+/// indicates a variable width unsigned integer fits in u64
+pub const U64_SIGNIFIER: u8 = 0xff;
 
 const U16_SIZE: usize = 2;
 const U32_SIZE: usize = 4;
@@ -187,7 +194,7 @@ pub trait CompactEncoding<Decode: ?Sized = Self> {
     /// encoding to it in one step.
     /// ```
     /// # use std::net::Ipv4Addr;
-    /// # use compact_encoding::encodable::CompactEncoding;
+    /// # use compact_encoding::CompactEncoding;
     /// let foo: Ipv4Addr = "0.0.0.0".parse()?;
     /// let mut buff = vec![0; foo.encoded_size()?];
     /// foo.encode(&mut buff)?;
@@ -202,7 +209,7 @@ pub trait CompactEncoding<Decode: ?Sized = Self> {
     /// method for: encoding to it in one step.
     /// ```
     /// # use std::net::Ipv4Addr;
-    /// # use compact_encoding::encodable::CompactEncoding;
+    /// # use compact_encoding::CompactEncoding;
     /// let foo: Ipv4Addr = "0.0.0.0".parse()?;
     /// vec![0; foo.encoded_size()?];
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -271,7 +278,7 @@ pub trait BoxArrayEncodable: CompactEncoding {
 /// [`CompactEncoding::encoded_size`] on all of them.
 /// Note this is macro is useful when your arguments have differing types.
 /// ```
-/// # use crate::compact_encoding::{sum_encoded_size, encodable::CompactEncoding};
+/// # use crate::compact_encoding::{sum_encoded_size, CompactEncoding};
 /// # use std::net::Ipv4Addr;
 /// let foo: Ipv4Addr = "0.0.0.0".parse()?;
 /// let bar = 42u64;
@@ -296,7 +303,7 @@ macro_rules! sum_encoded_size {
 /// Given a list of [`CompactEncoding`] things, create a zeroed buffer of the correct size for encoding.
 /// Note this is macro is useful when your arguments have differing types.
 /// ```
-/// # use crate::compact_encoding::{create_buffer, encodable::CompactEncoding};
+/// # use crate::compact_encoding::{create_buffer, CompactEncoding};
 /// # use std::net::Ipv4Addr;
 /// let foo: Ipv4Addr = "0.0.0.0".parse()?;
 /// let bar = 42u64;
@@ -321,7 +328,7 @@ macro_rules! create_buffer {
 /// Given a buffer and a list of [`CompactEncoding`] things, encode the arguments to the buffer.
 /// Note this is macro is useful when your arguments have differing types.
 /// ```
-/// # use crate::compact_encoding::{create_buffer, map_encode, encodable::CompactEncoding};
+/// # use crate::compact_encoding::{create_buffer, map_encode, CompactEncoding};
 /// let num = 42u64;
 /// let word = "yo";
 /// let mut buff = create_buffer!(num, word);
@@ -356,7 +363,7 @@ macro_rules! map_encode {
 /// ```
 macro_rules! to_encoded_bytes {
     ($($val:expr),*) => {{
-        use $crate::{map_encode, create_buffer, encodable::CompactEncoding};
+        use $crate::{map_encode, create_buffer, CompactEncoding};
         let mut buffer = create_buffer!($($val),*);
         map_encode!(&mut buffer, $($val),*);
         buffer
@@ -380,7 +387,7 @@ macro_rules! map_decode {
     ($buffer:expr, [
         $($field_type:ty),* $(,)?
     ]) => {{
-        use $crate::encodable::CompactEncoding;
+        use $crate::CompactEncoding;
         let mut current_buffer: &[u8] = $buffer;
 
         // Decode each type into `result_tuple`
