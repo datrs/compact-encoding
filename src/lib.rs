@@ -88,19 +88,19 @@
 //!     }
 //!
 //!     fn decode(&mut self, buffer: &[u8]) -> Result<MyStruct, EncodingError> {
-//!        let flags: u8 = self.decode(buffer)?;
-//!        let my_flag_1: bool = flags & 1 != 0;
-//!        let my_flag_2: bool = flags & 2 != 0;
-//!        let my_values: Vec<[u8; 32]> = if flags & 4 != 0 {
-//!            self.decode(buffer)?
-//!        } else {
-//!            vec![]
-//!        };
-//!        Ok(MyStruct {
+//!         let flags: u8 = self.decode(buffer)?;
+//!         let my_flag_1: bool = flags & 1 != 0;
+//!         let my_flag_2: bool = flags & 2 != 0;
+//!         let my_values: Vec<[u8; 32]> = if flags & 4 != 0 {
+//!             self.decode(buffer)?
+//!         } else {
+//!             vec![]
+//!         };
+//!         Ok(MyStruct {
 //!             my_flag_1,
 //!             my_flag_2,
-//!             my_values
-//!        })
+//!             my_values,
+//!         })
 //!     }
 //! }
 //!
@@ -108,12 +108,12 @@
 //! let empty = MyStruct {
 //!     my_flag_1: false,
 //!     my_flag_2: true,
-//!     my_values: vec![]
+//!     my_values: vec![],
 //! };
 //! let non_empty = MyStruct {
 //!     my_flag_1: true,
 //!     my_flag_2: false,
-//!     my_values: vec![[1; 32], [2; 32]]
+//!     my_values: vec![[1; 32], [2; 32]],
 //! };
 //!
 //! // Start with an empty state

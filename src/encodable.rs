@@ -10,7 +10,7 @@
 //!
 //! ### Quick start
 //! ```
-//! use compact_encoding::{to_encoded_bytes, map_decode};
+//! use compact_encoding::{map_decode, to_encoded_bytes};
 //!
 //! let number = 41_u32;
 //! let word = "hi";
@@ -61,8 +61,8 @@
 //! You can implement [`CompactEncoding`]` for your own structs like below:
 //! ```
 //! use compact_encoding::{
-//!     to_encoded_bytes, map_encode, map_decode, sum_encoded_size,
-//!     {encodable::CompactEncoding, EncodingError}
+//!     map_decode, map_encode, sum_encoded_size, to_encoded_bytes,
+//!     {encodable::CompactEncoding, EncodingError},
 //! };
 //!
 //! #[derive(Debug, PartialEq)]
@@ -101,21 +101,24 @@
 //!     }
 //!
 //!     fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError> {
-//!        let (flags, rest) = u8::decode(buffer)?;
-//!        let some_flag: bool = flags & 1 != 0;
-//!        let (values, rest) = if flags & 2 != 0 {
-//!            let (vec, rest) = <Vec<[u8; 32]>>::decode(rest)?;
-//!            (Some(vec), rest)
-//!        } else {
-//!            (None, rest)
-//!        };
-//!        let ((other, stuff), rest) = map_decode!(rest, [String, u64]);
-//!        Ok((Self {
-//!             some_flag,
-//!             values,
-//!             other,
-//!             stuff
-//!        }, rest))
+//!         let (flags, rest) = u8::decode(buffer)?;
+//!         let some_flag: bool = flags & 1 != 0;
+//!         let (values, rest) = if flags & 2 != 0 {
+//!             let (vec, rest) = <Vec<[u8; 32]>>::decode(rest)?;
+//!             (Some(vec), rest)
+//!         } else {
+//!             (None, rest)
+//!         };
+//!         let ((other, stuff), rest) = map_decode!(rest, [String, u64]);
+//!         Ok((
+//!             Self {
+//!                 some_flag,
+//!                 values,
+//!                 other,
+//!                 stuff,
+//!             },
+//!             rest,
+//!         ))
 //!     }
 //! }
 //!
@@ -131,14 +134,15 @@
 //!     some_flag: true,
 //!     values: Some(vec![[1; 32], [2; 32]]),
 //!     other: "yo".to_string(),
-//!     stuff: 0
+//!     stuff: 0,
 //! };
 //!
 //! // Encode `foo` and `bar` to a buffer
 //! let buffer = to_encoded_bytes!(&foo, &bar);
 //!
 //! // With the above use of a flags byte, the empty value encodes to only one byte
-//! assert_eq!(buffer.len(),
+//! assert_eq!(
+//!     buffer.len(),
 //!     // flags + string + u64
 //!     (1 + 3 + 1) +
 //!     // "" + (values.len().encoded_size() + (values.len() * <[u8;32]>::encoded_size()) + ""
