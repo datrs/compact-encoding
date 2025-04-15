@@ -158,15 +158,13 @@
 //! assert_eq!(bar_dec, bar);
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
+mod types;
 use std::{
     any::type_name,
     net::{Ipv4Addr, Ipv6Addr},
 };
 
-use crate::{
-    types::{U16_SIGNIFIER, U32_SIGNIFIER, U64_SIGNIFIER},
-    EncodingError,
-};
+use crate::types::{EncodingError, U16_SIGNIFIER, U32_SIGNIFIER, U64_SIGNIFIER};
 
 const U16_SIZE: usize = 2;
 const U32_SIZE: usize = 4;
