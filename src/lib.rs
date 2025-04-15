@@ -158,13 +158,13 @@
 //! assert_eq!(bar_dec, bar);
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
-pub mod types;
+pub mod error;
 use std::{
     any::type_name,
     net::{Ipv4Addr, Ipv6Addr},
 };
 
-pub use crate::types::{EncodingError, EncodingErrorKind};
+pub use crate::error::{EncodingError, EncodingErrorKind};
 
 /// indicates a variable width unsigned integer fits in u16
 pub const U16_SIGNIFIER: u8 = 0xfd;
