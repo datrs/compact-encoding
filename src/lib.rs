@@ -159,6 +159,8 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 pub mod error;
+mod fixedwidth;
+pub use fixedwidth::{FixedWidthEncoding, FixedWidthU32, FixedWidthU64, FixedWidthUint};
 use std::{
     any::type_name,
     net::{Ipv4Addr, Ipv6Addr},
@@ -175,6 +177,7 @@ pub const U64_SIGNIFIER: u8 = 0xff;
 
 const U16_SIZE: usize = 2;
 const U32_SIZE: usize = 4;
+const U64_SIZE: usize = 8;
 
 /// Implement for a type to get encoding and decoding.
 pub trait CompactEncoding<Decode: ?Sized = Self> {
