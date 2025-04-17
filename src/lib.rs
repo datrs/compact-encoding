@@ -82,7 +82,7 @@
 //!             } else {
 //!                 0
 //!             }
-//!         } + dbg!(sum_encoded_size!(&self.other, &self.stuff)))
+//!         } + sum_encoded_size!(&self.other, &self.stuff))
 //!     }
 //!
 //!     fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
@@ -438,6 +438,17 @@ fn get_slices_mut_checked(
             "Cound not read [{mid}] bytes from buffer of length [{len}]"
         ))
     })
+}
+
+/// Get a slice as an array of size `N`. Errors when `slice.len() != N`.
+pub fn as_array<const N: usize>(buffer: &[u8]) -> Result<&[u8; N], EncodingError> {
+    let blen = buffer.len();
+    if blen != N {
+        return Err(EncodingError::out_of_bounds(&format!(
+            "Could get a [{N}] byte array from a slice of length [{blen}]"
+        )));
+    }
+    Ok(buffer.split_first_chunk::<N>().expect("checked above").0)
 }
 
 /// Write `source` to `buffer` and return the remainder of `buffer`.

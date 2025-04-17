@@ -4,7 +4,7 @@ use std::fmt;
 /// Specific type [EncodingError]
 #[derive(fmt::Debug, Clone, PartialEq)]
 pub enum EncodingErrorKind {
-    /// Encoding or decoding did not stay between [State] `start` and `end`.
+    /// Encoding or decoding did not stay within the bounds of the buffer
     OutOfBounds,
     /// Buffer data overflowed type during encoding or decoding.
     Overflow,
