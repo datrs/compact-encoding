@@ -290,12 +290,18 @@ pub trait BoxArrayEncodable: CompactEncoding {
 /// assert_eq!(result, 12);
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+/// If you want to use this within a non-result context you can do
+/// ```
+/// # use crate::compact_encoding::{sum_encoded_size, CompactEncoding, EncodingError};
+/// let bar = 42u64;
+/// let result = (|| { Ok::<usize, EncodingError>(sum_encoded_size!(bar)) })().unwrap();
+/// assert_eq!(result, 1);
+/// ```
 macro_rules! sum_encoded_size {
     ($($val:expr),+) => {{
         let out: usize = [
                 $(
                     $val.encoded_size()?,
-
                 )*
             ].iter().sum();
         out

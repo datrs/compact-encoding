@@ -69,7 +69,7 @@ pub trait FixedWidthEncoding {
 #[derive(Debug)]
 pub struct FixedWidthUint<'a, T: FixedWidthEncoding + ?Sized>(&'a T);
 
-impl<'t, T: FixedWidthEncoding> CompactEncoding<T::Decode> for FixedWidthUint<'t, T> {
+impl<T: FixedWidthEncoding> CompactEncoding<T::Decode> for FixedWidthUint<'_, T> {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
         self.0.fw_encoded_size()
     }
