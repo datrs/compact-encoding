@@ -420,7 +420,7 @@ macro_rules! map_first {
 pub fn get_slices_checked(buffer: &[u8], mid: usize) -> Result<(&[u8], &[u8]), EncodingError> {
     buffer.split_at_checked(mid).ok_or_else(|| {
         EncodingError::out_of_bounds(&format!(
-            "Cound not read [{mid}] bytes from buffer of length [{}]",
+            "Could not split slice at [{mid}] slice.len() = [{}]",
             buffer.len()
         ))
     })
@@ -428,14 +428,14 @@ pub fn get_slices_checked(buffer: &[u8], mid: usize) -> Result<(&[u8], &[u8]), E
 
 /// Split a mutable slice into two mutable slices around `mid`.
 /// Returns encoding error when `mid` is out of bounds.
-fn get_slices_mut_checked(
+pub fn get_slices_mut_checked(
     buffer: &mut [u8],
     mid: usize,
 ) -> Result<(&mut [u8], &mut [u8]), EncodingError> {
     let len = buffer.len();
     buffer.split_at_mut_checked(mid).ok_or_else(|| {
         EncodingError::out_of_bounds(&format!(
-            "Cound not read [{mid}] bytes from buffer of length [{len}]"
+            "Could not split mut slice at [{mid}] slice.len() = [{len}]"
         ))
     })
 }
@@ -449,6 +449,20 @@ pub fn as_array<const N: usize>(buffer: &[u8]) -> Result<&[u8; N], EncodingError
         )));
     }
     Ok(buffer.split_first_chunk::<N>().expect("checked above").0)
+}
+
+/// Get a slice as an array of size `N`. Errors when `slice.len() != N`.
+pub fn as_array_mut<const N: usize>(buffer: &mut [u8]) -> Result<&mut [u8; N], EncodingError> {
+    let blen = buffer.len();
+    if blen != N {
+        return Err(EncodingError::out_of_bounds(&format!(
+            "Could get a [{N}] byte array from a slice of length [{blen}]"
+        )));
+    }
+    Ok(buffer
+        .split_first_chunk_mut::<N>()
+        .expect("checked above")
+        .0)
 }
 
 /// Write `source` to `buffer` and return the remainder of `buffer`.
@@ -564,30 +578,21 @@ pub fn encode_var_u64(uint: u64, buffer: &mut [u8]) -> Result<&mut [u8], Encodin
 /// Decode a `usize` from `buffer` and return the remaining bytes.
 /// This will fail, when we are decoding a `usize` on a usize = u32 machine for data that was originally encoded on a `usize = u64` machine whenever the value is over `u32::MAX`.
 pub fn decode_usize(buffer: &[u8]) -> Result<(usize, &[u8]), EncodingError> {
-    let [first, rest @ ..] = buffer else {
-        return Err(EncodingError::out_of_bounds(
-            "Colud not decode usize, empty buffer",
-        ));
-    };
-    let first = *first;
-    if first < U16_SIGNIFIER {
-        Ok((first.into(), rest))
-    } else if first == U16_SIGNIFIER {
-        let (out, rest) = decode_u16(buffer)?;
-        return Ok((out.into(), rest));
-    } else if first == U32_SIGNIFIER {
-        let (out, rest) = decode_u32(buffer)?;
-        let out: usize = out
-            .try_into()
-            .map_err(|_e| EncodingError::overflow("u32 is bigger than usize"))?;
-        return Ok((out, rest));
-    } else {
-        let (out, rest) = decode_u64(buffer)?;
-        let out: usize = out
-            .try_into()
-            .map_err(|_e| EncodingError::overflow("u64 is bigger than usize"))?;
-        return Ok((out, rest));
-    }
+    let ([first], rest) = take_array::<1>(buffer)?;
+    Ok(match first {
+        x if x < U16_SIGNIFIER => (x.into(), rest),
+        U16_SIGNIFIER => map_first!(decode_u16(rest)?, |x: u16| Ok(x.into())),
+        U32_SIGNIFIER => {
+            map_first!(decode_u32(rest)?, |val| usize::try_from(val).map_err(
+                |_| EncodingError::overflow("Could not convert u32 to usize")
+            ))
+        }
+        _ => {
+            map_first!(decode_u64(rest)?, |val| usize::try_from(val).map_err(
+                |_| EncodingError::overflow("Could not convert u64 to usize")
+            ))
+        }
+    })
 }
 
 /// Encoded a fixed sized array to a buffer
@@ -641,32 +646,14 @@ fn decode_u64_var(buffer: &[u8]) -> Result<(u64, &[u8]), EncodingError> {
     })
 }
 
-fn decode_usize_var(buffer: &[u8]) -> Result<(usize, &[u8]), EncodingError> {
-    let ([first], rest) = take_array::<1>(buffer)?;
-    Ok(match first {
-        x if x < U16_SIGNIFIER => (x.into(), rest),
-        U16_SIGNIFIER => map_first!(decode_u16(rest)?, |x: u16| Ok(x.into())),
-        U32_SIGNIFIER => {
-            map_first!(decode_u32(rest)?, |val| usize::try_from(val).map_err(
-                |_| EncodingError::overflow("Could not convert u32 to usize")
-            ))
-        }
-        _ => {
-            map_first!(decode_u64(rest)?, |val| usize::try_from(val).map_err(
-                |_| EncodingError::overflow("Could not convert u64 to usize")
-            ))
-        }
-    })
-}
-
 fn decode_buffer_vec(buffer: &[u8]) -> Result<(Vec<u8>, &[u8]), EncodingError> {
-    let (n_bytes, rest) = decode_usize_var(buffer)?;
+    let (n_bytes, rest) = decode_usize(buffer)?;
     let (out, rest) = get_slices_checked(rest, n_bytes)?;
     Ok((out.to_vec(), rest))
 }
 
 fn decode_string(buffer: &[u8]) -> Result<(String, &[u8]), EncodingError> {
-    let (len, rest) = decode_usize_var(buffer)?;
+    let (len, rest) = decode_usize(buffer)?;
     let (str_buff, rest) = get_slices_checked(rest, len)?;
     let out = String::from_utf8(str_buff.to_vec())
         .map_err(|e| EncodingError::invalid_data(&format!("String is invalid UTF-8, {e}")))?;
@@ -859,7 +846,7 @@ impl CompactEncoding for Vec<String> {
     where
         Self: Sized,
     {
-        let (len, mut rest) = decode_usize_var(buffer)?;
+        let (len, mut rest) = decode_usize(buffer)?;
         let mut out = Vec::with_capacity(len);
         for _ in 0..len {
             let result = String::decode(rest)?;
@@ -958,7 +945,7 @@ fn encode_vec<'a, T: CompactEncoding + Sized>(
 }
 
 fn decode_vec<T: CompactEncoding + Sized>(buffer: &[u8]) -> Result<(Vec<T>, &[u8]), EncodingError> {
-    let (len, mut rest) = decode_usize_var(buffer)?;
+    let (len, mut rest) = decode_usize(buffer)?;
     let mut out = Vec::with_capacity(len);
     for _ in 0..len {
         let res = <T as CompactEncoding>::decode(rest)?;
@@ -1009,7 +996,7 @@ impl VecEncodable for u32 {
     where
         Self: Sized,
     {
-        let (len, mut rest) = decode_usize_var(buffer)?;
+        let (len, mut rest) = decode_usize(buffer)?;
         let mut out = Vec::with_capacity(len);
 
         for _ in 0..len {
@@ -1053,7 +1040,7 @@ impl BoxArrayEncodable for u8 {
     where
         Self: Sized,
     {
-        let (len, rest) = decode_usize_var(buffer)?;
+        let (len, rest) = decode_usize(buffer)?;
         let (out, rest) = get_slices_checked(rest, len)?;
         Ok((out.into(), rest))
     }
@@ -1094,7 +1081,7 @@ mod test {
             assert_eq!(buffer.len(), $size);
             let remaining = encode_usize_var(&$value, &mut buffer)?;
             assert!(remaining.is_empty());
-            let (result, rest) = decode_usize_var(&buffer)?;
+            let (result, rest) = decode_usize(&buffer)?;
             assert!(rest.is_empty());
             assert_eq!(result, $value);
         };
