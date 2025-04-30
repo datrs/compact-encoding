@@ -319,12 +319,10 @@ pub trait BoxArrayEncodable: CompactEncoding {
 /// ```
 macro_rules! sum_encoded_size {
     ($($val:expr),+) => {{
-        let out: usize = [
-                $(
-                    $val.encoded_size()?,
-                )*
-            ].iter().sum();
-        out
+        0
+        $(
+            + $val.encoded_size()?
+        )*
     }}
 }
 
@@ -343,12 +341,13 @@ macro_rules! sum_encoded_size {
 /// ```
 macro_rules! create_buffer {
     ($($val:expr),+) => {{
-        let len: usize = [
-                $(
-                    $val.encoded_size()?,
+        let len = (
+            0
+            $(
+                + $val.encoded_size()?
 
-                )*
-            ].iter().sum();
+            )*
+        );
         vec![0; len]
     }}
 }
