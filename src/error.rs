@@ -10,6 +10,8 @@ pub enum EncodingErrorKind {
     Overflow,
     /// Buffer contained invalid data during decoding.
     InvalidData,
+    /// Some external error occurred causing a [`CompactEncoding`] method to fail.
+    External,
 }
 
 /// Encoding/decoding error.
@@ -56,6 +58,13 @@ impl EncodingError {
             message: message.to_string(),
         }
     }
+    /// Helper function for making an invalid data error
+    pub fn external(message: &str) -> Self {
+        Self {
+            kind: EncodingErrorKind::External,
+            message: message.to_string(),
+        }
+    }
 }
 
 impl fmt::Display for EncodingError {
@@ -64,8 +73,11 @@ impl fmt::Display for EncodingError {
             EncodingErrorKind::OutOfBounds => "Compact encoding failed, out of bounds",
             EncodingErrorKind::Overflow => "Compact encoding failed, overflow",
             EncodingErrorKind::InvalidData => "Compact encoding failed, invalid data",
+            EncodingErrorKind::External => {
+                "An external error caused a compact encoding operation to fail"
+            }
         };
-        write!(f, "{}: {}", prefix, self.message)
+        write!(f, "{}: {}", prefix, self.message,)
     }
 }
 
