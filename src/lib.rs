@@ -220,6 +220,26 @@ pub trait CompactEncoding<Decode: ?Sized = Self> {
     fn create_buffer(&self) -> Result<Vec<u8>, EncodingError> {
         Ok(vec![0; self.encoded_size()?])
     }
+
+    /// Like [`CompactEncoding::encode`] but also return the number of bytes encoded.
+    fn encode_with_len<'a>(
+        &self,
+        buffer: &'a mut [u8],
+    ) -> Result<(&'a mut [u8], usize), EncodingError> {
+        let before_len = buffer.len();
+        let rest = self.encode(buffer)?;
+        let num_encoded_bytes = before_len - rest.len();
+        Ok((rest, num_encoded_bytes))
+    }
+
+    /// Like [`CompactEncoding::decode`] but also return the number of bytes decoded.
+    fn decode_with_len(buffer: &[u8]) -> Result<(Decode, &[u8], usize), EncodingError>
+    where
+        Decode: Sized,
+    {
+        let (out, rest) = Self::decode(buffer)?;
+        Ok((out, rest, buffer.len() - rest.len()))
+    }
 }
 
 /// Implement this for type `T` to have `CompactEncoding` implemented for `Vec<T>`
