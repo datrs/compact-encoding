@@ -345,7 +345,6 @@ macro_rules! create_buffer {
             0
             $(
                 + $val.encoded_size()?
-
             )*
         );
         vec![0; len]
@@ -441,6 +440,12 @@ macro_rules! map_first {
         (mapped, two)
     }};
 }
+
+/// Returns a zerod `Box<[u8]>` where the slice is of length `encoded_size`.
+pub fn fixed_buffer_from_encoded_size(encoded_size: usize) -> Box<[u8]> {
+    vec![0; encoded_size].into_boxed_slice()
+}
+
 /// Split a slice in two at `mid`. Returns encoding error when `mid` is out of bounds.
 pub fn get_slices_checked(buffer: &[u8], mid: usize) -> Result<(&[u8], &[u8]), EncodingError> {
     buffer.split_at_checked(mid).ok_or_else(|| {
