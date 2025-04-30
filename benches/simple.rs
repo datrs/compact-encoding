@@ -1,30 +1,27 @@
 use std::time::Instant;
 
-use compact_encoding::{CompactEncoding, State};
+use compact_encoding::{
+    fixed_buffer_from_encoded_size, map_decode, map_encode, sum_encoded_size, CompactEncoding,
+    EncodingError,
+};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 const U32_VALUE: u32 = 0xF0E1D2C3;
 const STR_VALUE: &str = "foo";
 const U64_VALUE: u64 = u64::MAX;
 
-fn preencode() -> State {
-    let mut enc_state = State::new();
-    enc_state.preencode(&U32_VALUE).unwrap();
-    enc_state.preencode_str(STR_VALUE).unwrap();
-    enc_state.preencode(&U64_VALUE).unwrap();
-    enc_state
+fn preencode() -> Result<usize, EncodingError> {
+    Ok(sum_encoded_size!(U32_VALUE, STR_VALUE, U64_VALUE))
 }
 
-fn encode(enc_state: &mut State, buffer: &mut [u8]) {
-    enc_state.encode(&U32_VALUE, buffer).unwrap();
-    enc_state.encode_str(STR_VALUE, buffer).unwrap();
-    enc_state.encode(&U64_VALUE, buffer).unwrap();
+fn encode(buffer: &mut Box<[u8]>) -> Result<(), EncodingError> {
+    let _ = map_encode!(buffer, U32_VALUE, STR_VALUE, U64_VALUE);
+    Ok(())
 }
 
-fn decode(dec_state: &mut State, buffer: &[u8]) {
-    let _: u32 = dec_state.decode(buffer).unwrap();
-    let _: String = dec_state.decode(buffer).unwrap();
-    let _: u64 = dec_state.decode(buffer).unwrap();
+fn decode(buffer: &[u8]) -> Result<(), EncodingError> {
+    map_decode!(buffer, [u32, String, u64]);
+    Ok(())
 }
 
 fn preencode_generic_simple(c: &mut Criterion) {
@@ -36,10 +33,10 @@ fn preencode_generic_simple(c: &mut Criterion) {
 fn create_buffer_generic_simple(c: &mut Criterion) {
     c.bench_function("create buffer generic simple", |b| {
         b.iter_custom(|iters| {
-            let enc_state = preencode();
+            let encoded_size = preencode().unwrap();
             let start = Instant::now();
             for _ in 0..iters {
-                black_box(enc_state.create_buffer());
+                black_box(fixed_buffer_from_encoded_size(encoded_size));
             }
             start.elapsed()
         });
@@ -50,13 +47,12 @@ fn create_buffer_generic_simple(c: &mut Criterion) {
 fn encode_generic_simple(c: &mut Criterion) {
     c.bench_function("encode generic simple", |b| {
         b.iter_custom(|iters| {
-            let enc_state = preencode();
-            let buffer = enc_state.create_buffer();
+            let encoded_size = preencode().unwrap();
+            let buffer = fixed_buffer_from_encoded_size(encoded_size);
             let start = Instant::now();
             for _ in 0..iters {
-                let mut enc_state = enc_state.clone();
                 let mut buffer = buffer.clone();
-                black_box(encode(&mut enc_state, &mut buffer));
+                black_box(encode(&mut buffer).unwrap());
             }
             start.elapsed()
         });
@@ -67,15 +63,13 @@ fn encode_generic_simple(c: &mut Criterion) {
 fn decode_generic_simple(c: &mut Criterion) {
     c.bench_function("decode generic simple", |b| {
         b.iter_custom(|iters| {
-            let mut enc_state = preencode();
-            let mut buffer = enc_state.create_buffer();
-            encode(&mut enc_state, &mut buffer);
-            let dec_state = State::from_buffer(&buffer);
+            let encoded_size = preencode().unwrap();
+            let mut buffer = fixed_buffer_from_encoded_size(encoded_size);
+            encode(&mut buffer).unwrap();
             let start = Instant::now();
             for _ in 0..iters {
-                let mut dec_state = dec_state.clone();
                 let buffer = buffer.clone();
-                black_box(decode(&mut dec_state, &buffer));
+                black_box(decode(&buffer).unwrap());
             }
             start.elapsed()
         });
