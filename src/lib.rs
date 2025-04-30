@@ -61,8 +61,7 @@
 //! You can implement [`CompactEncoding`]` for your own structs like below:
 //! ```
 //! use compact_encoding::{
-//!     map_decode, map_encode, sum_encoded_size, to_encoded_bytes,
-//!     CompactEncoding, EncodingError,
+//!     map_decode, map_encode, sum_encoded_size, to_encoded_bytes, CompactEncoding, EncodingError,
 //! };
 //!
 //! #[derive(Debug, PartialEq)]
@@ -314,7 +313,7 @@ pub trait BoxArrayEncodable: CompactEncoding {
 /// ```
 /// # use crate::compact_encoding::{sum_encoded_size, CompactEncoding, EncodingError};
 /// let bar = 42u64;
-/// let result = (|| { Ok::<usize, EncodingError>(sum_encoded_size!(bar)) })().unwrap();
+/// let result = (|| Ok::<usize, EncodingError>(sum_encoded_size!(bar)))().unwrap();
 /// assert_eq!(result, 1);
 /// ```
 macro_rules! sum_encoded_size {

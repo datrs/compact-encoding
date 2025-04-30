@@ -26,13 +26,13 @@
 //!
 //! ```
 //! # use compact_encoding::EncodingError;
-//! use compact_encoding::{map_decode, FixedWidthUint, FixedWidthU32};
+//! use compact_encoding::{map_decode, FixedWidthU32, FixedWidthUint};
 //! let buff = vec![42, 0, 0, 0]; // 42_u32 fixed width encoded
 //!
 //! let ((decoded,), _) = map_decode!(&buff, [FixedWidthUint<u32>]);
 //! assert_eq!(decoded, 42); // NOT! FixedWidthUint(42_u32)
-//! // or using the alias
-//!assert_eq!(map_decode!(&buff, [FixedWidthU32]).0.0, 42);
+//!
+//! assert_eq!(map_decode!(&buff, [FixedWidthU32]).0 .0, 42); // or using the alias
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
