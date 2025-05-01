@@ -265,17 +265,17 @@ pub trait VecEncodable: CompactEncoding {
     }
 }
 
-// NB: we DO want &Box<..> because we want the trait to work for  boxed things
+// NB: we DO want &Box<..> because we want the trait to work for boxed things, hence clippy::allow
 #[allow(clippy::borrowed_box)]
-/// Define this trait for `T` to get `Box<[T]>: CompactEncoding`
-pub trait BoxArrayEncodable: CompactEncoding {
+/// Define this trait for `T` to get `impl Box<[T]> for CompactEncoding`
+pub trait BoxedSliceEncodable: CompactEncoding {
     /// The encoded size in bytes
-    fn boxed_array_encoded_size(boxed: &Box<[Self]>) -> Result<usize, EncodingError>
+    fn boxed_slice_encoded_size(boxed: &Box<[Self]>) -> Result<usize, EncodingError>
     where
         Self: Sized;
 
     /// Encode `Box<[Self]>` to the buffer and return the remainder of the buffer
-    fn box_encode<'a>(
+    fn boxed_slice_encode<'a>(
         vec: &Box<[Self]>,
         buffer: &'a mut [u8],
     ) -> Result<&'a mut [u8], EncodingError>
@@ -286,7 +286,7 @@ pub trait BoxArrayEncodable: CompactEncoding {
     }
 
     /// Decode [`Box<[Self]>`] from buffer
-    fn box_decode(buffer: &[u8]) -> Result<(Box<[Self]>, &[u8]), EncodingError>
+    fn boxed_slice_decode(buffer: &[u8]) -> Result<(Box<[Self]>, &[u8]), EncodingError>
     where
         Self: Sized,
     {
@@ -1046,15 +1046,15 @@ impl<const N: usize> VecEncodable for [u8; N] {
     }
 }
 
-impl BoxArrayEncodable for u8 {
-    fn boxed_array_encoded_size(boxed: &Box<[Self]>) -> Result<usize, EncodingError>
+impl BoxedSliceEncodable for u8 {
+    fn boxed_slice_encoded_size(boxed: &Box<[Self]>) -> Result<usize, EncodingError>
     where
         Self: Sized,
     {
         Ok(encoded_size_usize(boxed.len()) + boxed.len())
     }
 
-    fn box_encode<'a>(
+    fn boxed_slice_encode<'a>(
         boxed: &Box<[Self]>,
         buffer: &'a mut [u8],
     ) -> Result<&'a mut [u8], EncodingError>
@@ -1065,7 +1065,7 @@ impl BoxArrayEncodable for u8 {
         write_slice(boxed, rest)
     }
 
-    fn box_decode(buffer: &[u8]) -> Result<(Box<[Self]>, &[u8]), EncodingError>
+    fn boxed_slice_decode(buffer: &[u8]) -> Result<(Box<[Self]>, &[u8]), EncodingError>
     where
         Self: Sized,
     {
@@ -1075,20 +1075,20 @@ impl BoxArrayEncodable for u8 {
     }
 }
 
-impl<T: BoxArrayEncodable> CompactEncoding for Box<[T]> {
+impl<T: BoxedSliceEncodable> CompactEncoding for Box<[T]> {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
-        T::boxed_array_encoded_size(self)
+        T::boxed_slice_encoded_size(self)
     }
 
     fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
-        <T as BoxArrayEncodable>::box_encode(self, buffer)
+        <T as BoxedSliceEncodable>::boxed_slice_encode(self, buffer)
     }
 
     fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
     where
         Self: Sized,
     {
-        <T as BoxArrayEncodable>::box_decode(buffer)
+        <T as BoxedSliceEncodable>::boxed_slice_decode(buffer)
     }
 }
 
