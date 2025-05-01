@@ -10,7 +10,7 @@ pub enum EncodingErrorKind {
     Overflow,
     /// Buffer contained invalid data during decoding.
     InvalidData,
-    /// Some external error occurred causing a [`CompactEncoding`] method to fail.
+    /// Some external error occurred causing a [`crate::CompactEncoding`] method to fail.
     External,
 }
 

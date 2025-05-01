@@ -1,8 +1,7 @@
 use std::time::Instant;
 
 use compact_encoding::{
-    fixed_buffer_from_encoded_size, map_decode, map_encode, sum_encoded_size, CompactEncoding,
-    EncodingError,
+    create_buffer, map_decode, map_encode, sum_encoded_size, CompactEncoding, EncodingError,
 };
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
@@ -24,6 +23,10 @@ fn decode(buffer: &[u8]) -> Result<(), EncodingError> {
     Ok(())
 }
 
+fn create_buffer(encoded_size: usize) -> Box<[u8]> {
+    vec![0; encoded_size].into_boxed_slice()
+}
+
 fn preencode_generic_simple(c: &mut Criterion) {
     c.bench_function("preencode generic simple", |b| {
         b.iter(preencode);
@@ -36,7 +39,7 @@ fn create_buffer_generic_simple(c: &mut Criterion) {
             let encoded_size = preencode().unwrap();
             let start = Instant::now();
             for _ in 0..iters {
-                black_box(fixed_buffer_from_encoded_size(encoded_size));
+                black_box(create_buffer(encoded_size));
             }
             start.elapsed()
         });
@@ -48,7 +51,7 @@ fn encode_generic_simple(c: &mut Criterion) {
     c.bench_function("encode generic simple", |b| {
         b.iter_custom(|iters| {
             let encoded_size = preencode().unwrap();
-            let buffer = fixed_buffer_from_encoded_size(encoded_size);
+            let buffer = create_buffer(encoded_size);
             let start = Instant::now();
             for _ in 0..iters {
                 let mut buffer = buffer.clone();

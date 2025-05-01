@@ -4,11 +4,12 @@
 //! # Series of compact encoding schemes for building small and fast parsers and serializers
 //!
 //! Binary compatible with the
-//! [original Javascript compact-encoding library](https://github.com/compact-encoding/compact-encoding/).
+//! [original JavaScript compact-encoding library](https://github.com/compact-encoding/compact-encoding/).
 //!
 //! ## Usage
 //!
-//! ### Quick start
+//! The simplest way to encoded and decode a some data is using the [`to_encoded_bytes`] and
+//! [`map_decode`] macros:
 //! ```
 //! use compact_encoding::{map_decode, to_encoded_bytes};
 //!
@@ -23,32 +24,33 @@
 //! assert_eq!(word_dec, word);
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
-//! ### Manually implement encoding and decoding
+//! ### Manual encoding and decoding
 //!
-//! This example shows how to manually calculate the needed buffer size, create the buffer, encode
-//! data, and decode it. Using only the types which include a default [`CompactEncoding`]
-//! implementation. A more ergonomic pattern is demonstrated in other examples
+//! When more fine-grained control of encoding and decoding is needed you manually do each step of
+//! encoding and decoding like in the following example, where we want to use a fixed width
+//! encoding for `number` (instead of the default variable width encoding). It shows how to
+//! manually calculate the needed buffer size, create the buffer, encode data, and decode it.
 //! ```
-//! use compact_encoding::CompactEncoding;
+//! use compact_encoding::{CompactEncoding, FixedWidthEncoding, FixedWidthU32};
 //!
 //! let number = 41_u32;
 //! let word = "hi";
 //!
-//! // Use `encoded_size` to figure out how big a buffer should be.
-//! let size = number.encoded_size()? + word.encoded_size()?;
+//! // Use `encoded_size` to figure out how big a buffer should be
+//! let size = number.as_fixed_width().encoded_size()? + word.encoded_size()?;
 //!
 //! // Create a buffer with the calculated size
 //! let mut buffer = vec![0; size];
-//! assert_eq!(buffer.len(), 1 + 1 + 2);
+//! assert_eq!(buffer.len(), 4 + 1 + 2);
 //!
 //! // Then actually encode the values
-//! let mut remaining_buffer = number.encode(&mut buffer)?;
+//! let mut remaining_buffer = number.as_fixed_width().encode(&mut buffer)?;
 //! remaining_buffer = word.encode(remaining_buffer)?;
 //! assert!(remaining_buffer.is_empty());
-//! assert_eq!(buffer.to_vec(), vec![41_u8, 2_u8, b'h', b'i']);
+//! assert_eq!(buffer.to_vec(), vec![41_u8, 0, 0, 0, 2_u8, b'h', b'i']);
 //!
 //! // `buffer` now contains all the encoded data, and we can decode from it
-//! let (number_dec, remaining_buffer) = u32::decode(&buffer)?;
+//! let (number_dec, remaining_buffer) = FixedWidthU32::decode(&buffer)?;
 //! let (word_dec, remaining_buffer) = String::decode(remaining_buffer)?;
 //! assert!(remaining_buffer.is_empty());
 //! assert_eq!(number_dec, number);
@@ -56,9 +58,9 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
-//! ### Implementing CompactEncoding for new types
+//! ### Implementing CompactEncoding for custom types
 //!
-//! You can implement [`CompactEncoding`]` for your own structs like below:
+//! Here we demonstrate how to implement [`CompactEncoding`] for a custom struct.
 //! ```
 //! use compact_encoding::{
 //!     map_decode, map_encode, sum_encoded_size, to_encoded_bytes, CompactEncoding, EncodingError,
@@ -346,7 +348,7 @@ macro_rules! create_buffer {
                 + $val.encoded_size()?
             )*
         );
-        vec![0; len]
+        vec![0; len].into_boxed_slice()
     }}
 }
 
@@ -360,7 +362,7 @@ macro_rules! create_buffer {
 /// let mut buff = create_buffer!(num, word);
 /// let result = map_encode!(&mut buff, num, word);
 /// assert!(result.is_empty());
-/// assert_eq!(&buff, &[42, 2, b'y', b'o']);
+/// assert_eq!(&*buff, &[42, 2, b'y', b'o']);
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 macro_rules! map_encode {
@@ -384,7 +386,7 @@ macro_rules! map_encode {
 /// ```
 /// # use crate::compact_encoding::to_encoded_bytes;
 /// let result = to_encoded_bytes!(42u64, "yo");
-/// assert_eq!(&result, &[42, 2, 121, 111]);
+/// assert_eq!(&*result, &[42, 2, 121, 111]);
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 macro_rules! to_encoded_bytes {

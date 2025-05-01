@@ -1,20 +1,17 @@
 //! Allow encoding of unsigned ints in a fixed width way, instead of the default variable width.
 //!
-//! # Why?
-//!
-//! By default, unsigned integrers are variable width encoded with [`CompactEncoding`].
-//! However we sometimes want them fixed width encoded.
-//! The [`FixedWidthEncoding`] lets us do this. To fixed width encode an unsigned integrer simply
-//! call [`FixedWidthEncoding::as_fixed_width`] on it. Like this:
-//!
+//! Why? Because the default [`CompactEncoding`] implementation for unsigned integers uses a
+//! variable width encoding. However sometimes want them encoded with a fixed width,
+//! [`FixedWidthEncoding`] lets us do this. To fixed width encode an unsigned integrer simply call
+//! [`FixedWidthEncoding::as_fixed_width`] on it. Like this:
 //! ```
 //! # use compact_encoding::EncodingError;
 //! use compact_encoding::{to_encoded_bytes, FixedWidthEncoding};
 //! let buff = to_encoded_bytes!(42u32.as_fixed_width());
-//! assert_eq!(buff, vec![42, 0, 0, 0]);
+//! assert_eq!(buff, [42, 0, 0, 0].into());
 //! // vs variable width
 //! let buff = to_encoded_bytes!(42u32);
-//! assert_eq!(buff, vec![42]);
+//! assert_eq!(buff, [42].into());
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
@@ -138,8 +135,8 @@ mod test {
         let x = 42u32;
         let fixed_buff = to_encoded_bytes!(x.as_fixed_width());
         let var_buff = to_encoded_bytes!(x);
-        assert_eq!(fixed_buff, vec![42, 0, 0, 0]);
-        assert_eq!(var_buff, vec![42]);
+        assert_eq!(fixed_buff, [42_u8, 0, 0, 0].into());
+        assert_eq!(var_buff, [42_u8].into());
 
         let ((fixed_dec,), rest) = map_decode!(&fixed_buff, [FixedWidthU32]);
         assert!(rest.is_empty());
@@ -156,8 +153,8 @@ mod test {
         let x = 42u64;
         let fixed_buff = to_encoded_bytes!(x.as_fixed_width());
         let var_buff = to_encoded_bytes!(x);
-        assert_eq!(fixed_buff, vec![42, 0, 0, 0, 0, 0, 0, 0]);
-        assert_eq!(var_buff, vec![42]);
+        assert_eq!(fixed_buff, [42, 0, 0, 0, 0, 0, 0, 0].into());
+        assert_eq!(var_buff, [42].into());
 
         let ((fixed_dec,), rest) = map_decode!(&fixed_buff, [FixedWidthU64]);
         assert!(rest.is_empty());
