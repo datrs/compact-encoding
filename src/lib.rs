@@ -202,8 +202,8 @@ pub trait CompactEncoding<Decode: ?Sized = Self> {
     /// foo.encode(&mut buff)?;
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    fn to_encoded_bytes(&self) -> Result<Vec<u8>, EncodingError> {
-        let mut buff = vec![0; self.encoded_size()?];
+    fn to_encoded_bytes(&self) -> Result<Box<[u8]>, EncodingError> {
+        let mut buff = self.create_buffer()?;
         self.encode(&mut buff)?;
         Ok(buff)
     }
@@ -216,8 +216,8 @@ pub trait CompactEncoding<Decode: ?Sized = Self> {
     /// vec![0; foo.encoded_size()?];
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    fn create_buffer(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(vec![0; self.encoded_size()?])
+    fn create_buffer(&self) -> Result<Box<[u8]>, EncodingError> {
+        Ok(vec![0; self.encoded_size()?].into_boxed_slice())
     }
 
     /// Like [`CompactEncoding::encode`] but also return the number of bytes encoded.
@@ -438,11 +438,6 @@ macro_rules! map_first {
         let mapped = $f(one)?;
         (mapped, two)
     }};
-}
-
-/// Returns a zerod `Box<[u8]>` where the slice is of length `encoded_size`.
-pub fn fixed_buffer_from_encoded_size(encoded_size: usize) -> Box<[u8]> {
-    vec![0; encoded_size].into_boxed_slice()
 }
 
 /// Split a slice in two at `mid`. Returns encoding error when `mid` is out of bounds.
