@@ -180,7 +180,7 @@ const U16_SIZE: usize = 2;
 const U32_SIZE: usize = 4;
 const U64_SIZE: usize = 8;
 
-/// Implement for a type to get encoding and decoding.
+/// A trait for building small and fast parsers and serializers.
 pub trait CompactEncoding<Decode: ?Sized = Self> {
     /// The size in bytes required to encode `self`.
     fn encoded_size(&self) -> Result<usize, EncodingError>;
@@ -477,7 +477,7 @@ pub fn as_array<const N: usize>(buffer: &[u8]) -> Result<&[u8; N], EncodingError
     Ok(buffer.split_first_chunk::<N>().expect("checked above").0)
 }
 
-/// Get a slice as an array of size `N`. Errors when `slice.len() != N`.
+/// Get a slice as a mutable array of size `N`. Errors when `slice.len() != N`.
 pub fn as_array_mut<const N: usize>(buffer: &mut [u8]) -> Result<&mut [u8; N], EncodingError> {
     let blen = buffer.len();
     if blen != N {
@@ -621,7 +621,16 @@ pub fn decode_usize(buffer: &[u8]) -> Result<(usize, &[u8]), EncodingError> {
     })
 }
 
-/// Encoded a fixed sized array to a buffer
+/// Encoded a fixed sized array to a buffer, return the remainder of the buffer.
+/// Errors when `value.len() > buffer.len()`;
+/// ```
+/// # use compact_encoding::encode_bytes_fixed;
+/// let mut buffer = vec![0; 3];
+/// let rest = encode_bytes_fixed(&[4, 2], &mut buffer)?;
+/// assert_eq!(rest, &[0]);
+/// assert_eq!(buffer, &[4, 2, 0]);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn encode_bytes_fixed<'a, const N: usize>(
     value: &[u8; N],
     buffer: &'a mut [u8],
@@ -629,7 +638,16 @@ pub fn encode_bytes_fixed<'a, const N: usize>(
     write_array(value, buffer)
 }
 
-/// Encoded a fixed sized array to a buffer
+/// Decode a fixed sized array from a buffer. Return the array and the remainder of the buffer.
+/// Errors when `buffer.len() < N`;
+/// ```
+/// # use compact_encoding::decode_bytes_fixed;
+/// let mut buffer = vec![1, 2, 3];
+/// let (arr, rest) = decode_bytes_fixed::<2>(&mut buffer)?;
+/// assert_eq!(arr, [1, 2]);
+/// assert_eq!(rest, &[3]);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn decode_bytes_fixed<const N: usize>(
     buffer: &[u8],
 ) -> Result<([u8; N], &[u8]), EncodingError> {
