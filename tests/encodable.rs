@@ -1,6 +1,4 @@
-use compact_encoding::{
-    create_buffer, error::EncodingError, map_decode, map_encode, CompactEncoding,
-};
+use compact_encoding::{create_buffer, map_decode, map_encode, CompactEncoding, EncodingError};
 
 // The max value for 1 byte length is 252
 const MAX_ONE_BYTE_UINT: u8 = 252;

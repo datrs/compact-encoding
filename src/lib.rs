@@ -159,7 +159,7 @@
 //! assert_eq!(bar_dec, bar);
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
-pub mod error;
+mod error;
 mod fixedwidth;
 pub use fixedwidth::{FixedWidthEncoding, FixedWidthU32, FixedWidthU64, FixedWidthUint};
 use std::{
