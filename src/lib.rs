@@ -1,6 +1,5 @@
 #![forbid(unsafe_code, missing_docs)]
 #![cfg_attr(test, deny(warnings))]
-
 //! # Series of compact encoding schemes for building small and fast parsers and serializers
 //!
 //! Binary compatible with the
@@ -164,7 +163,7 @@ mod fixedwidth;
 pub use fixedwidth::{FixedWidthEncoding, FixedWidthU32, FixedWidthU64, FixedWidthUint};
 use std::{
     any::type_name,
-    net::{Ipv4Addr, Ipv6Addr},
+    net::{Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6},
 };
 
 pub use crate::error::{EncodingError, EncodingErrorKind};
@@ -179,6 +178,17 @@ pub const U64_SIGNIFIER: u8 = 0xff;
 const U16_SIZE: usize = 2;
 const U32_SIZE: usize = 4;
 const U64_SIZE: usize = 8;
+
+/// Encoded size of a network port
+pub const PORT_ENCODED_SIZE: usize = 2;
+/// Encoded size of an ipv4 address
+pub const IPV4_ADDR_ENCODED_SIZE: usize = U32_SIZE;
+/// Encoded size of an ipv6 address
+pub const IPV6_ADDR_ENCODED_SIZE: usize = 16;
+/// Encoded size for a [`SocketAddrV4`], an ipv4 address plus port.
+pub const SOCKET_ADDR_V4_ENCODED_SIZE: usize = IPV4_ADDR_ENCODED_SIZE + PORT_ENCODED_SIZE;
+/// Encoded size for a [`SocketAddrV6`], an ipv6 address plus port.
+pub const SOCKET_ADDR_V6_ENCODED_SIZE: usize = IPV6_ADDR_ENCODED_SIZE + PORT_ENCODED_SIZE;
 
 /// A trait for building small and fast parsers and serializers.
 pub trait CompactEncoding<Decode: ?Sized = Self> {
@@ -433,8 +443,20 @@ macro_rules! map_decode {
     }};
 }
 
-/// helper for mapping the first element of a two eleent tuple
+#[macro_export]
+/// Helper for mapping the first element of a two eleent tuple.
+/// This is useful for cleanly handling the result of CompactEncoding::decode.
 macro_rules! map_first {
+    ($res:expr, $f:expr) => {{
+        let (one, two) = $res;
+        let mapped = $f(one);
+        (mapped, two)
+    }};
+}
+
+#[macro_export]
+/// like [`map_first`] but the mapping should return a result.
+macro_rules! map_first_result {
     ($res:expr, $f:expr) => {{
         let (one, two) = $res;
         let mapped = $f(one)?;
@@ -514,7 +536,7 @@ pub fn take_array<const N: usize>(
 ) -> std::result::Result<([u8; N], &[u8]), EncodingError> {
     let Some((out, rest)) = buffer.split_first_chunk::<N>() else {
         return Err(EncodingError::out_of_bounds(&format!(
-            "Could not write [{}] bytes to buffer of length [{}]",
+            "Could not take [{}] bytes from buffer of length [{}]",
             N,
             buffer.len()
         )));
@@ -607,16 +629,14 @@ pub fn decode_usize(buffer: &[u8]) -> Result<(usize, &[u8]), EncodingError> {
     let ([first], rest) = take_array::<1>(buffer)?;
     Ok(match first {
         x if x < U16_SIGNIFIER => (x.into(), rest),
-        U16_SIGNIFIER => map_first!(decode_u16(rest)?, |x: u16| Ok(x.into())),
+        U16_SIGNIFIER => map_first!(decode_u16(rest)?, |x: u16| x.into()),
         U32_SIGNIFIER => {
-            map_first!(decode_u32(rest)?, |val| usize::try_from(val).map_err(
-                |_| EncodingError::overflow("Could not convert u32 to usize")
-            ))
+            map_first_result!(decode_u32(rest)?, |val| usize::try_from(val)
+                .map_err(|_| EncodingError::overflow("Could not convert u32 to usize")))
         }
         _ => {
-            map_first!(decode_u64(rest)?, |val| usize::try_from(val).map_err(
-                |_| EncodingError::overflow("Could not convert u64 to usize")
-            ))
+            map_first_result!(decode_u64(rest)?, |val| usize::try_from(val)
+                .map_err(|_| EncodingError::overflow("Could not convert u64 to usize")))
         }
     })
 }
@@ -684,8 +704,8 @@ fn decode_u64_var(buffer: &[u8]) -> Result<(u64, &[u8]), EncodingError> {
     let ([first], rest) = take_array::<1>(buffer)?;
     Ok(match first {
         x if x < U16_SIGNIFIER => (x.into(), rest),
-        U16_SIGNIFIER => map_first!(decode_u16(rest)?, |x: u16| Ok(x.into())),
-        U32_SIGNIFIER => map_first!(decode_u32(rest)?, |x: u32| Ok(x.into())),
+        U16_SIGNIFIER => map_first!(decode_u16(rest)?, |x: u16| x.into()),
+        U32_SIGNIFIER => map_first!(decode_u32(rest)?, |x: u32| x.into()),
         _ => decode_u64(rest)?,
     })
 }
@@ -717,7 +737,8 @@ fn encode_u64(val: u64, buffer: &mut [u8]) -> Result<&mut [u8], EncodingError> {
     write_array(&val.to_le_bytes(), buffer)
 }
 
-fn encode_usize_var<'a>(
+/// Encode a `usize` in a variable width way
+pub fn encode_usize_var<'a>(
     value: &usize,
     buffer: &'a mut [u8],
 ) -> Result<&'a mut [u8], EncodingError> {
@@ -838,6 +859,23 @@ impl CompactEncoding for u64 {
     }
 }
 
+impl CompactEncoding for usize {
+    fn encoded_size(&self) -> Result<usize, EncodingError> {
+        Ok(encoded_size_usize(*self))
+    }
+
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+        encode_usize_var(self, buffer)
+    }
+
+    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
+    where
+        Self: Sized,
+    {
+        decode_usize(buffer)
+    }
+}
+
 impl CompactEncoding for String {
     fn encoded_size(&self) -> Result<usize, EncodingError> {
         encoded_size_str(self)
@@ -947,11 +985,20 @@ impl CompactEncoding for Ipv4Addr {
         Ok((Ipv4Addr::from(*dest), rest))
     }
 }
+
 impl CompactEncoding for Ipv6Addr {
     fn encoded_size(&self) -> std::result::Result<usize, EncodingError> {
-        Ok(4)
+        Ok(IPV6_ADDR_ENCODED_SIZE)
     }
 
+    /// ```
+    /// # use std::net::Ipv6Addr;
+    /// # use compact_encoding::CompactEncoding;
+    /// let addr: Ipv6Addr = "1:2:3::1".parse()?;
+    /// let buff = addr.to_encoded_bytes()?.to_vec();
+    /// assert_eq!(buff, vec![0, 1, 0, 2, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     fn encode<'a>(&self, buffer: &'a mut [u8]) -> std::result::Result<&'a mut [u8], EncodingError> {
         let Some((dest, rest)) = buffer.split_first_chunk_mut::<16>() else {
             return Err(EncodingError::out_of_bounds(&format!(
@@ -1014,6 +1061,14 @@ impl<T: VecEncodable> CompactEncoding for Vec<T> {
     {
         <T as VecEncodable>::vec_decode(buffer)
     }
+}
+
+/// Get the encoded size for a Vec with elements which have a fixed size encoding.
+pub fn vec_encoded_size_for_fixed_sized_elements<T: CompactEncoding>(
+    vec: &[T],
+    element_encoded_size: usize,
+) -> usize {
+    encoded_size_usize(vec.len()) + (vec.len() * element_encoded_size)
 }
 
 impl VecEncodable for u32 {
@@ -1104,6 +1159,86 @@ impl<T: BoxedSliceEncodable> CompactEncoding for Box<[T]> {
         Self: Sized,
     {
         <T as BoxedSliceEncodable>::boxed_slice_decode(buffer)
+    }
+}
+
+impl CompactEncoding for SocketAddrV4 {
+    fn encoded_size(&self) -> Result<usize, EncodingError> {
+        Ok(SOCKET_ADDR_V4_ENCODED_SIZE)
+    }
+
+    /// ```
+    /// # use std::net::SocketAddrV4;
+    /// # use compact_encoding::CompactEncoding;
+    /// let addr: SocketAddrV4 = "127.0.0.1:42".parse()?;
+    /// let buff = addr.to_encoded_bytes()?.to_vec();
+    /// assert_eq!(buff, vec![127, 0, 0, 1, 42, 0]);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+        let rest = self.ip().encode(buffer)?;
+        encode_u16(self.port(), rest)
+    }
+
+    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
+    where
+        Self: Sized,
+    {
+        let (ip, rest) = Ipv4Addr::decode(buffer)?;
+        let (port, rest) = decode_u16(rest)?;
+        Ok((SocketAddrV4::new(ip, port), rest))
+    }
+}
+impl CompactEncoding for SocketAddrV6 {
+    fn encoded_size(&self) -> Result<usize, EncodingError> {
+        Ok(SOCKET_ADDR_V6_ENCODED_SIZE)
+    }
+
+    /// ```
+    /// # use std::net::SocketAddrV6;
+    /// # use compact_encoding::CompactEncoding;
+    /// let addr: SocketAddrV6 = "[1:2:3::1]:80".parse()?;
+    /// let buff = addr.to_encoded_bytes()?.to_vec();
+    /// assert_eq!(buff, vec![0, 1, 0, 2, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 80, 0]);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+        let rest = self.ip().encode(buffer)?;
+        encode_u16(self.port(), rest)
+    }
+
+    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
+    where
+        Self: Sized,
+    {
+        let (ip, rest) = Ipv6Addr::decode(buffer)?;
+        let (port, rest) = decode_u16(rest)?;
+        // TODO is this correct for flowinfo and scope_id?
+        Ok((SocketAddrV6::new(ip, port, 0, 0), rest))
+    }
+}
+
+impl VecEncodable for SocketAddrV4 {
+    fn vec_encoded_size(vec: &[Self]) -> Result<usize, EncodingError>
+    where
+        Self: Sized,
+    {
+        Ok(vec_encoded_size_for_fixed_sized_elements(
+            vec,
+            SOCKET_ADDR_V4_ENCODED_SIZE,
+        ))
+    }
+}
+
+impl VecEncodable for SocketAddrV6 {
+    fn vec_encoded_size(vec: &[Self]) -> Result<usize, EncodingError>
+    where
+        Self: Sized,
+    {
+        Ok(vec_encoded_size_for_fixed_sized_elements(
+            vec,
+            SOCKET_ADDR_V6_ENCODED_SIZE,
+        ))
     }
 }
 
