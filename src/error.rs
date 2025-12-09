@@ -87,7 +87,7 @@ impl From<EncodingError> for std::io::Error {
             EncodingErrorKind::InvalidData => {
                 std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{e}"))
             }
-            _ => std::io::Error::new(std::io::ErrorKind::Other, format!("{e}")),
+            _ => std::io::Error::other(format!("{e}")),
         }
     }
 }
