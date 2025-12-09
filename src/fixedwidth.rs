@@ -57,7 +57,7 @@ pub trait FixedWidthEncoding {
         Self: Sized;
 
     /// Get a uint in a form that encodes to a fixed width
-    fn as_fixed_width(&self) -> FixedWidthUint<Self> {
+    fn as_fixed_width(&self) -> FixedWidthUint<'_, Self> {
         FixedWidthUint(self)
     }
 }
