@@ -180,7 +180,7 @@ const U32_SIZE: usize = 4;
 const U64_SIZE: usize = 8;
 
 /// Encoded size of a network port
-pub const PORT_ENCODED_SIZE: usize = 2;
+pub const PORT_ENCODED_SIZE: usize = 2; // u16
 /// Encoded size of an ipv4 address
 pub const IPV4_ADDR_ENCODED_SIZE: usize = U32_SIZE;
 /// Encoded size of an ipv6 address
@@ -1242,6 +1242,19 @@ impl VecEncodable for SocketAddrV6 {
     }
 }
 
+impl VecEncodable for Vec<u8> {
+    fn vec_encoded_size(vec: &[Self]) -> Result<usize, EncodingError>
+    where
+        Self: Sized,
+    {
+        let mut out = encoded_size_usize(vec.len());
+        for v in vec {
+            out += v.encoded_size()?;
+        }
+        Ok(out)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -1273,6 +1286,18 @@ mod test {
         check_usize_var_enc_dec!(1 + 4, 65536);
         check_usize_var_enc_dec!(1 + 8, 4294967296);
 
+        Ok(())
+    }
+    #[test]
+    fn enc_dec_vec_vec() -> Result<(), EncodingError> {
+        let input = vec![b"hello".to_vec(), b"goodbye".to_vec()];
+        let buf = input.to_encoded_bytes()?;
+        let (result, rest): (Vec<Vec<u8>>, &[u8]) = Vec::<Vec<u8>>::decode(&buf)?;
+        assert_eq!(result.len(), input.len());
+        for (i, v) in result.iter().enumerate() {
+            assert_eq!(v, &input[i]);
+        }
+        assert!(rest.is_empty());
         Ok(())
     }
 }
