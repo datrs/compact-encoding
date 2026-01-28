@@ -1367,4 +1367,37 @@ mod test {
         assert!(rest.is_empty());
         Ok(())
     }
+
+    #[test]
+    fn enc_dec_byte_slice() -> Result<(), EncodingError> {
+        let input: &[u8] = b"hello world";
+        let buf = input.to_encoded_bytes()?;
+        let (result, rest): (Vec<u8>, &[u8]) = Vec::<u8>::decode(&buf)?;
+        assert_eq!(result, input);
+        assert!(rest.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn enc_dec_empty_slice_slice_u8() -> Result<(), EncodingError> {
+        let input: &[&[u8]] = &[];
+        let buf = input.to_encoded_bytes()?;
+        assert_eq!(buf.len(), 1); // just the length prefix
+        let (result, rest): (Vec<Vec<u8>>, &[u8]) = Vec::<Vec<u8>>::decode(&buf)?;
+        assert!(result.is_empty());
+        assert!(rest.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn slice_and_vec_encode_identically() -> Result<(), EncodingError> {
+        let vec_input = vec![b"hello".to_vec(), b"goodbye".to_vec()];
+        let slice_input: &[&[u8]] = &[b"hello".as_slice(), b"goodbye".as_slice()];
+
+        let vec_buf = vec_input.to_encoded_bytes()?;
+        let slice_buf = slice_input.to_encoded_bytes()?;
+
+        assert_eq!(&*vec_buf, &*slice_buf);
+        Ok(())
+    }
 }
