@@ -180,9 +180,9 @@ const U32_SIZE: usize = 4;
 const U64_SIZE: usize = 8;
 
 /// Encoded size of a network port
-pub const PORT_ENCODED_SIZE: usize = 2;
+pub const PORT_ENCODED_SIZE: usize = 2; // ports are unsigned 16-bit integers (u16)
 /// Encoded size of an ipv4 address
-pub const IPV4_ADDR_ENCODED_SIZE: usize = U32_SIZE;
+pub const IPV4_ADDR_ENCODED_SIZE: usize = 4;
 /// Encoded size of an ipv6 address
 pub const IPV6_ADDR_ENCODED_SIZE: usize = 16;
 /// Encoded size for a [`SocketAddrV4`], an ipv4 address plus port.
@@ -254,7 +254,7 @@ pub trait CompactEncoding<Decode: ?Sized = Self> {
 }
 
 /// Implement this for type `T` to have `CompactEncoding` implemented for `Vec<T>`
-pub trait VecEncodable: CompactEncoding {
+pub trait VecEncodable<Decode = Self>: CompactEncoding<Decode> {
     /// Calculate the resulting size in bytes of `vec`
     fn vec_encoded_size(vec: &[Self]) -> Result<usize, EncodingError>
     where
@@ -263,15 +263,15 @@ pub trait VecEncodable: CompactEncoding {
     /// Encode `vec` to `buffer`
     fn vec_encode<'a>(vec: &[Self], buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError>
     where
-        Self: Sized,
+        Self: Sized + CompactEncoding,
     {
         encode_vec(vec, buffer)
     }
 
-    /// Decode [`Vec<Self>`] from buffer
-    fn vec_decode(buffer: &[u8]) -> Result<(Vec<Self>, &[u8]), EncodingError>
+    /// Decode [`Vec<Decode>`] from buffer
+    fn vec_decode(buffer: &[u8]) -> Result<(Vec<Decode>, &[u8]), EncodingError>
     where
-        Self: Sized,
+        Decode: Sized + CompactEncoding,
     {
         decode_vec(buffer)
     }
@@ -955,6 +955,22 @@ impl CompactEncoding for Vec<u8> {
         decode_buffer_vec(buffer)
     }
 }
+impl CompactEncoding<Vec<u8>> for &[u8] {
+    fn encoded_size(&self) -> Result<usize, EncodingError> {
+        Ok(encoded_size_usize(self.len()) + self.len())
+    }
+
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+        encode_buffer(self, buffer)
+    }
+
+    fn decode(buffer: &[u8]) -> Result<(Vec<u8>, &[u8]), EncodingError>
+    where
+        Self: Sized,
+    {
+        decode_buffer_vec(buffer)
+    }
+}
 
 impl CompactEncoding for Ipv4Addr {
     fn encoded_size(&self) -> std::result::Result<usize, EncodingError> {
@@ -1060,6 +1076,31 @@ impl<T: VecEncodable> CompactEncoding for Vec<T> {
         Self: Sized,
     {
         <T as VecEncodable>::vec_decode(buffer)
+    }
+}
+
+impl<T, D> CompactEncoding<Vec<D>> for &[T]
+where
+    T: VecEncodable<D> + CompactEncoding<D>,
+    D: CompactEncoding,
+{
+    fn encoded_size(&self) -> Result<usize, EncodingError> {
+        T::vec_encoded_size(self)
+    }
+
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+        let mut rest = encode_usize_var(&self.len(), buffer)?;
+        for x in *self {
+            rest = x.encode(rest)?;
+        }
+        Ok(rest)
+    }
+
+    fn decode(buffer: &[u8]) -> Result<(Vec<D>, &[u8]), EncodingError>
+    where
+        D: Sized,
+    {
+        decode_vec(buffer)
     }
 }
 
@@ -1242,6 +1283,32 @@ impl VecEncodable for SocketAddrV6 {
     }
 }
 
+impl VecEncodable for Vec<u8> {
+    fn vec_encoded_size(vec: &[Self]) -> Result<usize, EncodingError>
+    where
+        Self: Sized,
+    {
+        let mut out = encoded_size_usize(vec.len());
+        for v in vec {
+            out += v.encoded_size()?;
+        }
+        Ok(out)
+    }
+}
+
+impl VecEncodable<Vec<u8>> for &[u8] {
+    fn vec_encoded_size(vec: &[Self]) -> Result<usize, EncodingError>
+    where
+        Self: Sized,
+    {
+        let mut out = encoded_size_usize(vec.len());
+        for v in vec {
+            out += v.encoded_size()?;
+        }
+        Ok(out)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -1273,6 +1340,64 @@ mod test {
         check_usize_var_enc_dec!(1 + 4, 65536);
         check_usize_var_enc_dec!(1 + 8, 4294967296);
 
+        Ok(())
+    }
+    #[test]
+    fn enc_dec_vec_vec_u8() -> Result<(), EncodingError> {
+        let input = vec![b"hello".to_vec(), b"goodbye".to_vec()];
+        let buf = input.as_slice().to_encoded_bytes()?;
+        let (result, rest): (Vec<Vec<u8>>, &[u8]) = Vec::<Vec<u8>>::decode(&buf)?;
+        assert_eq!(result.len(), input.len());
+        for (i, v) in result.iter().enumerate() {
+            assert_eq!(v, &input[i]);
+        }
+        assert!(rest.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn enc_dec_slice_slice_u8() -> Result<(), EncodingError> {
+        let input: &[&[u8]] = &[b"hello".as_slice(), b"goodbye".as_slice()];
+        let buf = input.to_encoded_bytes()?;
+        let (result, rest): (Vec<Vec<u8>>, &[u8]) = Vec::<Vec<u8>>::decode(&buf)?;
+        assert_eq!(result.len(), input.len());
+        for (i, v) in result.iter().enumerate() {
+            assert_eq!(v, &input[i]);
+        }
+        assert!(rest.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn enc_dec_byte_slice() -> Result<(), EncodingError> {
+        let input: &[u8] = b"hello world";
+        let buf = input.to_encoded_bytes()?;
+        let (result, rest): (Vec<u8>, &[u8]) = Vec::<u8>::decode(&buf)?;
+        assert_eq!(result, input);
+        assert!(rest.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn enc_dec_empty_slice_slice_u8() -> Result<(), EncodingError> {
+        let input: &[&[u8]] = &[];
+        let buf = input.to_encoded_bytes()?;
+        assert_eq!(buf.len(), 1); // just the length prefix
+        let (result, rest): (Vec<Vec<u8>>, &[u8]) = Vec::<Vec<u8>>::decode(&buf)?;
+        assert!(result.is_empty());
+        assert!(rest.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn slice_and_vec_encode_identically() -> Result<(), EncodingError> {
+        let vec_input = vec![b"hello".to_vec(), b"goodbye".to_vec()];
+        let slice_input: &[&[u8]] = &[b"hello".as_slice(), b"goodbye".as_slice()];
+
+        let vec_buf = vec_input.to_encoded_bytes()?;
+        let slice_buf = slice_input.to_encoded_bytes()?;
+
+        assert_eq!(&*vec_buf, &*slice_buf);
         Ok(())
     }
 }

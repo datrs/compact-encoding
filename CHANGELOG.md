@@ -11,7 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Implement `CompactEncoding<Vec<u8>>` for `&[u8]`, allowing byte slices to be encoded directly
+* Implement `CompactEncoding<Vec<D>>` for `&[T]` where `T: VecEncodable<D>`, enabling encoding of slices like `&[&[u8]]`
+* Implement `VecEncodable` for `Vec<u8>` to support `Vec<Vec<u8>>`
+* Implement `VecEncodable<Vec<u8>>` for `&[u8]` to support `&[&[u8]]`
+
 ### Changed
+
+* `VecEncodable` trait now has an optional `Decode` type parameter (defaults to `Self`) to support types where the encoded type differs from the decoded type
 
 ### Removed
 
