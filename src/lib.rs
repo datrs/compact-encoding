@@ -689,15 +689,9 @@ fn decode_u64(buffer: &[u8]) -> Result<(u64, &[u8]), EncodingError> {
 }
 
 fn decode_u32_var(buffer: &[u8]) -> Result<(u32, &[u8]), EncodingError> {
-    let ([first], rest) = take_array::<1>(buffer)?;
-    Ok(match first {
-        x if x < U16_SIGNIFIER => (x.into(), rest),
-        U16_SIGNIFIER => {
-            let (val, rest) = decode_u16(rest)?;
-            (val.into(), rest)
-        }
-        _ => decode_u32(rest)?,
-    })
+    Ok(map_first_result!(decode_u64_var(buffer)?, |val| {
+        u32::try_from(val).map_err(|_| EncodingError::overflow("Could not convert u64 to u32"))
+    }))
 }
 
 fn decode_u64_var(buffer: &[u8]) -> Result<(u64, &[u8]), EncodingError> {
@@ -873,6 +867,72 @@ impl CompactEncoding for usize {
         Self: Sized,
     {
         decode_usize(buffer)
+    }
+}
+
+// Signed integers are zig-zag encoded as a variable width uint, like `int` of the JavaScript
+// implementation.
+fn zig_zag_encode(value: i64) -> u64 {
+    ((value << 1) ^ (value >> 63)) as u64
+}
+
+fn zig_zag_decode(value: u64) -> i64 {
+    ((value >> 1) as i64) ^ -((value & 1) as i64)
+}
+
+impl CompactEncoding for i32 {
+    fn encoded_size(&self) -> Result<usize, EncodingError> {
+        Ok(encoded_size_var_u64(zig_zag_encode((*self).into())))
+    }
+
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+        encode_var_u64(zig_zag_encode((*self).into()), buffer)
+    }
+
+    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
+    where
+        Self: Sized,
+    {
+        Ok(map_first_result!(decode_u64_var(buffer)?, |val| {
+            i32::try_from(zig_zag_decode(val))
+                .map_err(|_| EncodingError::overflow("Could not convert i64 to i32"))
+        }))
+    }
+}
+
+impl CompactEncoding for i64 {
+    fn encoded_size(&self) -> Result<usize, EncodingError> {
+        Ok(encoded_size_var_u64(zig_zag_encode(*self)))
+    }
+
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+        encode_var_u64(zig_zag_encode(*self), buffer)
+    }
+
+    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
+    where
+        Self: Sized,
+    {
+        Ok(map_first!(decode_u64_var(buffer)?, zig_zag_decode))
+    }
+}
+
+// Like the JavaScript implementation, any byte other than 1 decodes as false.
+impl CompactEncoding for bool {
+    fn encoded_size(&self) -> Result<usize, EncodingError> {
+        Ok(1)
+    }
+
+    fn encode<'a>(&self, buffer: &'a mut [u8]) -> Result<&'a mut [u8], EncodingError> {
+        write_array(&[u8::from(*self)], buffer)
+    }
+
+    fn decode(buffer: &[u8]) -> Result<(Self, &[u8]), EncodingError>
+    where
+        Self: Sized,
+    {
+        let ([byte], rest) = take_array::<1>(buffer)?;
+        Ok((byte == 1, rest))
     }
 }
 
