@@ -522,8 +522,7 @@ pub fn write_array<'a, const N: usize>(
     let blen = buffer.len();
     let Some((dest, rest)) = buffer.split_first_chunk_mut::<N>() else {
         return Err(EncodingError::out_of_bounds(&format!(
-            "Could not write [{}] bytes to buffer of length [{}]",
-            N, blen
+            "Could not write [{N}] bytes to buffer of length [{blen}]"
         )));
     };
     dest.copy_from_slice(source);
@@ -550,8 +549,7 @@ pub fn take_array_mut<const N: usize>(
     let blen = buffer.len();
     let Some((out, rest)) = buffer.split_first_chunk_mut::<N>() else {
         return Err(EncodingError::out_of_bounds(&format!(
-            "Could not write [{}] bytes to buffer of length [{blen}]",
-            N,
+            "Could not write [{N}] bytes to buffer of length [{blen}]"
         )));
     };
     Ok((out, rest))
@@ -690,17 +688,18 @@ fn decode_u64(buffer: &[u8]) -> Result<(u64, &[u8]), EncodingError> {
 
 fn decode_u32_var(buffer: &[u8]) -> Result<(u32, &[u8]), EncodingError> {
     Ok(map_first_result!(decode_u64_var(buffer)?, |val| {
-        u32::try_from(val).map_err(|_| EncodingError::overflow("Could not convert u64 to u32"))
+        u32::try_from(val)
+            .map_err(|_| EncodingError::overflow("uint too large to decode into a u32"))
     }))
 }
 
 fn decode_u64_var(buffer: &[u8]) -> Result<(u64, &[u8]), EncodingError> {
     let ([first], rest) = take_array::<1>(buffer)?;
     Ok(match first {
-        x if x < U16_SIGNIFIER => (x.into(), rest),
+        x @ 0..U16_SIGNIFIER => (x.into(), rest),
         U16_SIGNIFIER => map_first!(decode_u16(rest)?, |x: u16| x.into()),
         U32_SIGNIFIER => map_first!(decode_u32(rest)?, |x: u32| x.into()),
-        _ => decode_u64(rest)?,
+        U64_SIGNIFIER => decode_u64(rest)?,
     })
 }
 
