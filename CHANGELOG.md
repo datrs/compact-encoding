@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Implement `CompactEncoding` for `bool`, encoded in one byte, where any byte other than 1 decodes as `false`
+* Implement `CompactEncoding` for `i32` and `i64`, zig-zag encoded as a variable width uint like `int` of the JavaScript implementation
+
+### Fixed
+
+* `u32` decodes a uint with the 8 byte prefix instead of reading only 4 of its bytes, and fails with an overflow error when the value doesn't fit
+
 ### Changed
 
 ### Removed
@@ -25,26 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Implement `CompactEncoding<Vec<D>>` for `&[T]` where `T: VecEncodable<D>`, enabling encoding of slices like `&[&[u8]]`
 * Implement `VecEncodable` for `Vec<u8>` to support `Vec<Vec<u8>>`
 * Implement `VecEncodable<Vec<u8>>` for `&[u8]` to support `&[&[u8]]`
-* Implement `CompactEncoding` for `bool`, encoded in one byte, where any byte other than 1 decodes as `false`
-* Implement `CompactEncoding` for `i32` and `i64`, zig-zag encoded as a variable width uint like `int` of the JavaScript implementation
-
-### Fixed
-
-* `u32` decodes a uint with the 8 byte prefix instead of reading only 4 of its bytes, and fails with an overflow error when the value doesn't fit
 
 ### Changed
 
 * `VecEncodable` trait now has an optional `Decode` type parameter (defaults to `Self`) to support types where the encoded type differs from the decoded type
-
-### Removed
-
-
-
-## [2.1.0] - 2025-12-09
-
-### Added
-
-### Changed
 
 ### Removed
 
