@@ -202,3 +202,80 @@ fn cenc_32_byte_array() -> Result<(), EncodingError> {
     assert_eq!(result.2, many_array);
     Ok(())
 }
+
+// Encoded by the JavaScript implementation with `int`.
+const INT_VECTORS: [(i64, &[u8]); 10] = [
+    (0, &[0x00]),
+    (-1, &[0x01]),
+    (1, &[0x02]),
+    (-63, &[0x7d]),
+    (126, &[0xfc]),
+    (-127, &[0xfd, 0xfd, 0x00]),
+    (2147483647, &[0xfe, 0xfe, 0xff, 0xff, 0xff]),
+    (-2147483648, &[0xfe, 0xff, 0xff, 0xff, 0xff]),
+    (
+        1 << 40,
+        &[0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00],
+    ),
+    (
+        -(1 << 40),
+        &[0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x00, 0x00],
+    ),
+];
+
+#[test]
+fn cenc_i64_like_javascript() -> Result<(), EncodingError> {
+    for (value, encoded) in INT_VECTORS {
+        assert_eq!(&*value.to_encoded_bytes()?, encoded);
+
+        let (result, rest) = i64::decode(encoded)?;
+        assert!(rest.is_empty());
+        assert_eq!(result, value);
+    }
+    Ok(())
+}
+
+#[test]
+fn cenc_i32_like_javascript() -> Result<(), EncodingError> {
+    for (value, encoded) in INT_VECTORS {
+        match i32::try_from(value) {
+            Ok(value) => {
+                assert_eq!(&*value.to_encoded_bytes()?, encoded);
+
+                let (result, rest) = i32::decode(encoded)?;
+                assert!(rest.is_empty());
+                assert_eq!(result, value);
+            }
+            Err(_) => assert!(i32::decode(encoded).is_err()),
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn cenc_bool() -> Result<(), EncodingError> {
+    assert_eq!(&*true.to_encoded_bytes()?, &[1]);
+    assert_eq!(&*false.to_encoded_bytes()?, &[0]);
+
+    let ((a, b, c), rest) = map_decode!(&[1, 0, 2], [bool, bool, bool]);
+    assert!(rest.is_empty());
+    assert!(a);
+    assert!(!b);
+    assert!(!c);
+
+    assert!(bool::decode(&[]).is_err());
+    Ok(())
+}
+
+#[test]
+fn cenc_u32_from_eight_byte_uint() -> Result<(), EncodingError> {
+    let encoded = [0xff, 0x2a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07];
+    let ((value, next), rest) = map_decode!(&encoded, [u32, u8]);
+    assert!(rest.is_empty());
+    assert_eq!(value, 42);
+    assert_eq!(next, 7);
+
+    let too_big = [0xff, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00];
+    assert!(u32::decode(&too_big).is_err());
+    Ok(())
+}
