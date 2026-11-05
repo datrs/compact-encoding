@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Removed
+
+
+
+## [2.3.0] - 2026-11-05
+
+### Added
+
 * Implement `CompactEncoding` for `bool`, encoded in one byte, where any byte other than 1 decodes as `false`
 * Implement `CompactEncoding` for `i32` and `i64`, zig-zag encoded as a variable width uint like `int` of the JavaScript implementation
 
@@ -59,7 +69,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 <!-- next-url -->
-[Unreleased]: https://github.com/datrs/compact-encoding/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/datrs/compact-encoding/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/datrs/compact-encoding/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/datrs/compact-encoding/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/datrs/compact-encoding/compare/v2.1.0...v2.1.0
 [2.1.0]: https://github.com/datrs/compact-encoding/compare/v2.0.0...v2.1.0
